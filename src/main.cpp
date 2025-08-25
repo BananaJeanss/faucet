@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <iostream>
 #include <fstream>
+
 using namespace std;
 
 #include "include/loadConfig.h"
@@ -27,6 +28,7 @@ static void sig_handler(int)
 // config values
 string loadEnv;
 int port = 8080;
+string siteDir = "public";
 
 int main(int argc, char *argv[])
 {
@@ -39,7 +41,7 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port);
+    int confResult = loadConfig(port, siteDir);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -50,6 +52,19 @@ int main(int argc, char *argv[])
         printf("No config found, created default .env file.\n");
         printf("Continuing with defaults...\n");
     }
+
+    // normalize siteDir
+    auto normalizeDir = [](std::string d)
+    {
+        // remove all leading slashes
+        while (!d.empty() && d.front() == '/')
+            d.erase(0, 1);
+        // remove all trailing slashes
+        while (!d.empty() && d.back() == '/')
+            d.pop_back();
+        return d;
+    };
+    siteDir = normalizeDir(siteDir);
 
     // loop through args
     for (int i = 1; i < argc; i++)
@@ -104,7 +119,7 @@ int main(int argc, char *argv[])
 
     char ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
-    printf("Listening on %s:%d\n", ip, ntohs(addr.sin_port));
+    printf("Listening on %s:%d, serving from %s\n", ip, ntohs(addr.sin_port), siteDir.c_str());
     fflush(stdout);
 
     // listen
@@ -208,10 +223,8 @@ int main(int argc, char *argv[])
         // strip leading slash for filesystem open
         const char *rel_path = (path_start[0] == '/') ? path_start + 1 : path_start;
 
-        // build full path inside public/
-        std::string fullPath = "public/";
-        fullPath += rel_path;
-
+        // build full path inside of siteDir
+        std::string fullPath = siteDir.empty() ? rel_path : (siteDir + "/" + rel_path);
         int opened_fd = open(fullPath.c_str(), O_RDONLY);
         if (opened_fd == -1)
         {

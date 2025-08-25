@@ -6,7 +6,7 @@
 
 using namespace std;
 
-int loadConfig(int &port)
+int loadConfig(int &port, std::string &siteDir)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -37,6 +37,10 @@ int loadConfig(int &port)
             int p = std::atoi(value.c_str());
             if (p >= 1 && p <= 65535)
                 port = p;
+        }
+        else if (key == "SITE_DIR") // load site directory
+        {
+            siteDir = value;
         }
     }
     return 0;
