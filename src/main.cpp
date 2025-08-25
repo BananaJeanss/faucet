@@ -13,13 +13,12 @@
 #include <errno.h>
 #include <iostream>
 #include <fstream>
-
-using namespace std;
+#include <iomanip>
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
-#include <iomanip>
-#include <bits/basic_string.h>
+
+using namespace std;
 
 static volatile sig_atomic_t keepRunning = 1;
 
@@ -194,7 +193,7 @@ int main(int argc, char *argv[])
             const char *hdr = "HTTP/1.1 400 Bad Request\r\n\r\n";
             send(client_fd, hdr, strlen(hdr), 0);
             close(client_fd);
-            return 0;
+            continue;
         }
 
         // expect GET path HTTP/1.1
@@ -202,7 +201,7 @@ int main(int argc, char *argv[])
         {
             // unsupported method
             close(client_fd);
-            return 0;
+            continue;
         }
 
         char *path_start = buffer + 4; // after GET
@@ -210,8 +209,7 @@ int main(int argc, char *argv[])
         if (!path_end) // malformed
         {
             close(client_fd);
-            close(sock);
-            return 0;
+            continue;
         }
         *path_end = 0;
 
@@ -227,8 +225,7 @@ int main(int argc, char *argv[])
             const char *hdr = "HTTP/1.1 400 Bad Request\r\n\r\n";
             send(client_fd, hdr, strlen(hdr), 0);
             close(client_fd);
-            close(sock);
-            return 0;
+            continue;
         }
 
         // strip leading slash for filesystem open
