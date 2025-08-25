@@ -17,6 +17,7 @@
 using namespace std;
 
 #include "include/loadConfig.h"
+#include "include/return404.h"
 
 static volatile sig_atomic_t keepRunning = 1;
 
@@ -29,6 +30,7 @@ static void sig_handler(int)
 string loadEnv;
 int port = 8080;
 string siteDir = "public";
+string Page404 = ""; // relative to siteDir, empty for none
 
 int main(int argc, char *argv[])
 {
@@ -41,7 +43,7 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port, siteDir);
+    int confResult = loadConfig(port, siteDir, Page404);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -228,19 +230,14 @@ int main(int argc, char *argv[])
         int opened_fd = open(fullPath.c_str(), O_RDONLY);
         if (opened_fd == -1)
         {
-            const char *hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send(client_fd, hdr, strlen(hdr), 0);
-            close(client_fd);
+            return404(client_fd, siteDir, Page404);
             continue;
         }
-
         struct stat st{};
         if (fstat(opened_fd, &st) < 0 || !S_ISREG(st.st_mode))
         {
-            const char *hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send(client_fd, hdr, strlen(hdr), 0);
-            close(opened_fd);
-            close(client_fd);
+            return404(client_fd, siteDir, Page404);
+            close(opened_fd); // not a regular file, close
             continue;
         }
 

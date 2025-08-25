@@ -6,7 +6,7 @@
 
 using namespace std;
 
-int loadConfig(int &port, std::string &siteDir)
+int loadConfig(int &port, std::string &siteDir, std::string &Page404)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -41,6 +41,10 @@ int loadConfig(int &port, std::string &siteDir)
         else if (key == "SITE_DIR") // load site directory
         {
             siteDir = value;
+        }
+        else if (key == "404_PAGE") // load custom 404 page
+        {
+            Page404 = value;
         }
     }
     return 0;
