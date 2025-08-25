@@ -18,6 +18,8 @@ using namespace std;
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
+#include <iomanip>
+#include <bits/basic_string.h>
 
 static volatile sig_atomic_t keepRunning = 1;
 
@@ -157,7 +159,14 @@ int main(int argc, char *argv[])
 
         char clientIp[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, clientIp, sizeof(clientIp));
-        printf("Received request from %s:%d\n", clientIp, ntohs(client_addr.sin_port));
+
+        // log request /w timestamp
+        auto t = time(nullptr);
+        auto tm = *localtime(&t);
+        char timebuf[32];
+        strftime(timebuf, sizeof(timebuf), "%d-%m-%Y %H:%M:%S", &tm);
+
+        printf("[%s] Received request from %s:%d\n", timebuf, clientIp, ntohs(client_addr.sin_port));
         fflush(stdout);
 
         // read headers/request
