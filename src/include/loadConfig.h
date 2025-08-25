@@ -1,3 +1,3 @@
 #pragma once
 
-int loadConfig(int& port);
+int loadConfig(int &port);

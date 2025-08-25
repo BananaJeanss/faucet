@@ -206,9 +206,13 @@ int main(int argc, char *argv[])
         }
 
         // strip leading slash for filesystem open
-        const char *fs_path = (path_start[0] == '/') ? path_start + 1 : path_start;
+        const char *rel_path = (path_start[0] == '/') ? path_start + 1 : path_start;
 
-        int opened_fd = open(fs_path, O_RDONLY);
+        // build full path inside public/
+        std::string fullPath = "public/";
+        fullPath += rel_path;
+
+        int opened_fd = open(fullPath.c_str(), O_RDONLY);
         if (opened_fd == -1)
         {
             const char *hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
@@ -229,20 +233,29 @@ int main(int argc, char *argv[])
 
         // send file
         // guess content type based on extension for proper loading in browsers
-        auto guessContentType = [](const char* path) -> const char* {
-            const char* dot = strrchr(path, '.');
-            if (!dot) return "application/octet-stream";
-            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0) return "text/html";
-            if (strcmp(dot, ".css") == 0) return "text/css";
-            if (strcmp(dot, ".js") == 0) return "text/javascript";
-            if (strcmp(dot, ".json") == 0) return "application/json";
-            if (strcmp(dot, ".png") == 0) return "image/png";
-            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0) return "image/jpeg";
-            if (strcmp(dot, ".gif") == 0) return "image/gif";
+        auto guessContentType = [](const char *path) -> const char *
+        {
+            const char *dot = strrchr(path, '.');
+            if (!dot)
+                return "application/octet-stream";
+            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
+                return "text/html";
+            if (strcmp(dot, ".css") == 0)
+                return "text/css";
+            if (strcmp(dot, ".js") == 0)
+                return "text/javascript";
+            if (strcmp(dot, ".json") == 0)
+                return "application/json";
+            if (strcmp(dot, ".png") == 0)
+                return "image/png";
+            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
+                return "image/jpeg";
+            if (strcmp(dot, ".gif") == 0)
+                return "image/gif";
             return "application/octet-stream";
         };
 
-        const char* ctype = guessContentType(fs_path);
+        const char *ctype = guessContentType(fullPath.c_str());
 
         char header[256];
         int header_len = snprintf(header, sizeof(header),
