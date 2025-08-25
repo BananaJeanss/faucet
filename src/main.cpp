@@ -15,6 +15,8 @@
 #include <fstream>
 using namespace std;
 
+#include "include/loadConfig.h"
+
 static volatile sig_atomic_t keepRunning = 1;
 
 static void sig_handler(int)
@@ -25,40 +27,6 @@ static void sig_handler(int)
 // config values
 string loadEnv;
 int port = 8080;
-
-static int loadConfig()
-{
-    // open .env
-    ifstream envFile(".env");
-    if (!envFile.is_open())
-    {
-        return 1; // no config
-    }
-
-    while (getline(envFile, loadEnv))
-    {
-        // skip comments
-        if (loadEnv.empty() || loadEnv[0] == '#')
-            return 1;
-
-        size_t eqPos = loadEnv.find('=');
-        if (eqPos == string::npos)
-            return 1; // malformed line
-
-        string key = loadEnv.substr(0, eqPos);
-        string value = loadEnv.substr(eqPos + 1);
-
-        if (key == "PORT") // load port, command arg overrides
-        {
-            int p = atoi(value.c_str());
-            if (p >= 1 && p <= 65535)
-            {
-                port = p;
-            }
-        }
-    }
-    return 0;
-}
 
 int main(int argc, char *argv[])
 {
@@ -71,9 +39,15 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    if (loadConfig() != 0)
+    int confResult = loadConfig(port);
+    if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
+        printf("Continuing with defaults...\n");
+    }
+    if (confResult == 2)
+    {
+        printf("No config found, created default .env file.\n");
         printf("Continuing with defaults...\n");
     }
 

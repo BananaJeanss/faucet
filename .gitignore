@@ -1,2 +1,4 @@
 *.out
 .env
+*.o
+faucet
