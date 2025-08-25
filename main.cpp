@@ -254,14 +254,30 @@ int main(int argc, char *argv[])
         }
 
         // send file
+        // guess content type based on extension for proper loading in browsers
+        auto guessContentType = [](const char* path) -> const char* {
+            const char* dot = strrchr(path, '.');
+            if (!dot) return "application/octet-stream";
+            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0) return "text/html";
+            if (strcmp(dot, ".css") == 0) return "text/css";
+            if (strcmp(dot, ".js") == 0) return "text/javascript";
+            if (strcmp(dot, ".json") == 0) return "application/json";
+            if (strcmp(dot, ".png") == 0) return "image/png";
+            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0) return "image/jpeg";
+            if (strcmp(dot, ".gif") == 0) return "image/gif";
+            return "application/octet-stream";
+        };
+
+        const char* ctype = guessContentType(fs_path);
+
         char header[256];
         int header_len = snprintf(header, sizeof(header),
                                   "HTTP/1.1 200 OK\r\n"
                                   "Content-Length: %lld\r\n"
-                                  "Content-Type: text/html\r\n"
+                                  "Content-Type: %s\r\n"
                                   "Connection: close\r\n"
                                   "\r\n",
-                                  (long long)st.st_size);
+                                  (long long)st.st_size, ctype);
         if (header_len < 0 || header_len >= (int)sizeof(header))
         {
             close(opened_fd);
