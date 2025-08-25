@@ -10,9 +10,23 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <cstdlib>
+#include <errno.h>
+
+static volatile sig_atomic_t keepRunning = 1;
+
+static void sig_handler(int)
+{
+    keepRunning = 0;
+}
 
 int main(int argc, char *argv[])
 {
+    struct sigaction sa{};
+    sa.sa_handler = sig_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+
     printf("faucet http server\n");
     printf("---\n");
 
@@ -84,13 +98,29 @@ int main(int argc, char *argv[])
     // loop accept
     for (;;)
     {
-        int client_fd = accept(sock, 0, 0);
+        if (!keepRunning)
+            break;
+
+        sockaddr_in client_addr{};
+        socklen_t client_len = sizeof(client_addr);
+        int client_fd = accept(sock, (struct sockaddr *)&client_addr, &client_len);
         if (client_fd < 0)
         {
+            if (errno == EINTR)
+            {
+                // interrupted by signal, check flag.
+                if (!keepRunning)
+                    break;
+                continue;
+            }
             perror("accept");
-            close(sock);
-            return 1;
+            break;
         }
+
+        char clientIp[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, clientIp, sizeof(clientIp));
+        printf("Received request from %s:%d\n", clientIp, ntohs(client_addr.sin_port));
+        fflush(stdout);
 
         // read headers/request
         char buffer[4096];
@@ -114,18 +144,11 @@ int main(int argc, char *argv[])
         // if header too large/malformed, close
         if (!strstr(buffer, eolmark))
         {
+            const char *hdr = "HTTP/1.1 400 Bad Request\r\n\r\n";
+            send(client_fd, hdr, strlen(hdr), 0);
             close(client_fd);
-            close(sock);
             return 0;
         }
-
-        int requestIp = ntohl(addr.sin_addr.s_addr);
-
-        printf("Received request from %d.%d.%d.%d\n",
-               (requestIp >> 24) & 0xFF,
-               (requestIp >> 16) & 0xFF,
-               (requestIp >> 8) & 0xFF,
-               requestIp & 0xFF);
 
         // expect GET path HTTP/1.1
         if (strncmp(buffer, "GET ", 4) != 0)
@@ -214,5 +237,7 @@ int main(int argc, char *argv[])
         close(client_fd);
     }
 
+    printf("Shutting down...\n");
     close(sock);
+    return 0;
 }
