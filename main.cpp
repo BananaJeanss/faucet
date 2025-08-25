@@ -11,12 +11,53 @@
 #include <signal.h>
 #include <cstdlib>
 #include <errno.h>
+#include <iostream>
+#include <fstream>
+using namespace std;
 
 static volatile sig_atomic_t keepRunning = 1;
 
 static void sig_handler(int)
 {
     keepRunning = 0;
+}
+
+// config values
+string loadEnv;
+int port = 8080;
+
+static int loadConfig()
+{
+    // open .env
+    ifstream envFile(".env");
+    if (!envFile.is_open())
+    {
+        return 1; // no config
+    }
+
+    while (getline(envFile, loadEnv))
+    {
+        // skip comments
+        if (loadEnv.empty() || loadEnv[0] == '#')
+            return 1;
+
+        size_t eqPos = loadEnv.find('=');
+        if (eqPos == string::npos)
+            return 1; // malformed line
+
+        string key = loadEnv.substr(0, eqPos);
+        string value = loadEnv.substr(eqPos + 1);
+
+        if (key == "PORT") // load port, command arg overrides
+        {
+            int p = atoi(value.c_str());
+            if (p >= 1 && p <= 65535)
+            {
+                port = p;
+            }
+        }
+    }
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -28,9 +69,13 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &sa, nullptr);
 
     printf("faucet http server\n");
-    printf("---\n");
 
-    int port = 8080;
+    // load config
+    if (loadConfig() != 0)
+    {
+        printf("Failed to load config, check the .env file.\n");
+        printf("Continuing with defaults...\n");
+    }
 
     // loop through args
     for (int i = 1; i < argc; i++)
@@ -94,6 +139,8 @@ int main(int argc, char *argv[])
         perror("listen");
         return 1;
     }
+
+    printf("---\n");
 
     // loop accept
     for (;;)
