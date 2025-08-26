@@ -17,6 +17,7 @@
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
+#include "include/returnDirListing.h"
 
 using namespace std;
 
@@ -32,6 +33,7 @@ string loadEnv;
 int port = 8080;
 string siteDir = "public";
 string Page404 = ""; // relative to siteDir, empty for none
+bool useDirListing = false;
 
 int main(int argc, char *argv[])
 {
@@ -44,7 +46,7 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port, siteDir, Page404);
+    int confResult = loadConfig(port, siteDir, Page404, useDirListing);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -213,10 +215,12 @@ int main(int argc, char *argv[])
         }
         *path_end = 0;
 
-        // map / to index.html
+        // map / to index.html if no file specified
+        bool userSetFile = true;
         if (strcmp(path_start, "/") == 0)
         {
             path_start = (char *)"/index.html";
+            userSetFile = false;
         }
 
         // reject .. for simple security
@@ -231,13 +235,112 @@ int main(int argc, char *argv[])
         // strip leading slash for filesystem open
         const char *rel_path = (path_start[0] == '/') ? path_start + 1 : path_start;
 
+        // handle explicit directory requests ending with '/'
+        if (path_start[strlen(path_start) - 1] == '/')
+        {
+            // rel_path currently ends with '/', trim for filesystem path
+            std::string dirRel = rel_path;
+            while (!dirRel.empty() && dirRel.back() == '/')
+                dirRel.pop_back();
+            std::string dirFull = siteDir.empty() ? dirRel : (siteDir + "/" + dirRel);
+
+            struct stat dst{};
+            if (stat(dirFull.c_str(), &dst) == 0 && S_ISDIR(dst.st_mode))
+            {
+                // try common index files
+                const char *indices[] = {"index.html", "index.htm"};
+                bool servedIndex = false;
+                for (const char *idx : indices)
+                {
+                    std::string idxFull = dirFull + "/" + idx;
+                    int fd = open(idxFull.c_str(), O_RDONLY);
+                    if (fd != -1)
+                    {
+                        struct stat ist{};
+                        if (fstat(fd, &ist) == 0 && S_ISREG(ist.st_mode))
+                        {
+                            // minimal content-type guess (reuse existing lambda style)
+                            auto guessContentType = [](const char *path) -> const char *
+                            {
+                                const char *dot = strrchr(path, '.');
+                                if (!dot)
+                                    return "application/octet-stream";
+                                if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
+                                    return "text/html";
+                                if (strcmp(dot, ".css") == 0)
+                                    return "text/css";
+                                if (strcmp(dot, ".js") == 0)
+                                    return "text/javascript";
+                                if (strcmp(dot, ".json") == 0)
+                                    return "application/json";
+                                if (strcmp(dot, ".png") == 0)
+                                    return "image/png";
+                                if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
+                                    return "image/jpeg";
+                                if (strcmp(dot, ".gif") == 0)
+                                    return "image/gif";
+                                return "application/octet-stream";
+                            };
+                            const char *ctype = guessContentType(idxFull.c_str());
+                            char header[256];
+                            int header_len = snprintf(header, sizeof(header),
+                                                      "HTTP/1.1 200 OK\r\n"
+                                                      "Content-Length: %lld\r\n"
+                                                      "Content-Type: %s\r\n"
+                                                      "Connection: close\r\n"
+                                                      "\r\n",
+                                                      (long long)ist.st_size, ctype);
+                            if (header_len > 0 && header_len < (int)sizeof(header))
+                            {
+                                send(client_fd, header, header_len, 0);
+                                off_t off = 0;
+                                while (off < ist.st_size)
+                                {
+                                    ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
+                                    if (s <= 0)
+                                        break;
+                                }
+                            }
+                            close(fd);
+                            close(client_fd);
+                            servedIndex = true;
+                            break;
+                        }
+                        close(fd);
+                    }
+                }
+                if (servedIndex)
+                    continue;
+
+                // no index file; directory listing or 404
+                if (useDirListing)
+                {
+                    returnDirListing(client_fd, siteDir, dirRel, Page404);
+                }
+                else
+                {
+                    return404(client_fd, siteDir, Page404);
+                }
+                continue;
+            }
+        }
+
         // build full path inside of siteDir
         std::string fullPath = siteDir.empty() ? rel_path : (siteDir + "/" + rel_path);
         int opened_fd = open(fullPath.c_str(), O_RDONLY);
-        if (opened_fd == -1)
+        if (opened_fd == -1) // file not found
         {
-            return404(client_fd, siteDir, Page404);
-            continue;
+            // if dirlisting enabled and user did not specify file, show dir listing
+            if (useDirListing && !userSetFile)
+            {
+                returnDirListing(client_fd, siteDir, rel_path, Page404);
+                continue;
+            }
+            else
+            {
+                return404(client_fd, siteDir, Page404);
+                continue;
+            }
         }
         struct stat st{};
         if (fstat(opened_fd, &st) < 0 || !S_ISREG(st.st_mode))

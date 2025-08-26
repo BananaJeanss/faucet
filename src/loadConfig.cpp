@@ -6,7 +6,7 @@
 
 using namespace std;
 
-int loadConfig(int &port, std::string &siteDir, std::string &Page404)
+int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useDirListing)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -45,6 +45,17 @@ int loadConfig(int &port, std::string &siteDir, std::string &Page404)
         else if (key == "404_PAGE") // load custom 404 page
         {
             Page404 = value;
+        }
+        else if (key == "DIR_LISTING") // enable directory listing
+        {
+            // lowercase key
+            for (auto &c : value)
+                c = tolower(c);
+            if (value == "true") {
+                useDirListing = true;
+            } else {
+                useDirListing = false;
+            }
         }
     }
     return 0;
