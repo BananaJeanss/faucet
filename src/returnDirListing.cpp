@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <vector>
 #include <algorithm>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 using namespace std;
 
@@ -55,17 +57,62 @@ void returnDirListing(int client_fd,
     } // replace {Dir} with folder name
 
     std::string body = header;
+    body += "<hr>"; // hr for style points cause its cool
+    body += "<tr><th>Name</th><th>Size</th></tr>";
     if (!relPath.empty())
     {
         body += "<tr><td><a href=\"../\">../</a></td></tr>";
     }
+
     for (auto &e : entries)
     {
+        // check if dir, if file, add size data later
+        bool isDir = false;
+        {
+            struct stat st;
+            std::string p = fullPath + "/" + e;
+            if (stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+                isDir = true;
+        }
+
         std::string display = e;
+        if (isDir && display.back() != '/')
+            display += '/';
+
         body += "<tr><td><a href=\"";
         body += e;
-        // append slash visually for directories (simple heuristic)
-        body += "\">" + display + "</a></td></tr>";
+        if (isDir)
+            body += "/"; // ensure link ends with slash for directories
+        body += "\">" + display + "</a></td>";
+
+        if (!isDir)
+        {
+            // Get file size
+            struct stat st;
+            if (stat((fullPath + "/" + e).c_str(), &st) == 0)
+            {
+                int bytes = st.st_size;
+                // convert to human readable
+                const char *units[] = {"B", "KB", "MB", "GB"};
+                int unitIdx = 0;
+                double fsize = bytes;
+                while (fsize >= 1024.0 && unitIdx < 3)
+                {
+                    fsize /= 1024.0;
+                    unitIdx++;
+                }
+                // round to 1 decimal place at most
+                char sizeStr[32];
+                if (unitIdx == 0)
+                    snprintf(sizeStr, sizeof(sizeStr), "%d %s", bytes, units[unitIdx]);
+                else
+                    snprintf(sizeStr, sizeof(sizeStr), "%.1f %s", fsize, units[unitIdx]);
+                body += "<td>" + std::string(sizeStr) + "</td>";
+            }
+        }
+
+        // close
+        body += "</tr>";
     }
     body += pageFooter;
 
