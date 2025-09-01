@@ -19,6 +19,7 @@
 #include "include/return404.h"
 #include "include/returnDirListing.h"
 #include "include/contentTypes.h"
+#include <vector>
 
 using namespace std;
 
@@ -35,6 +36,17 @@ int port = 8080;
 string siteDir = "public";
 string Page404 = ""; // relative to siteDir, empty for none
 bool useDirListing = false;
+int requestRateLimit = 10; // requests/second per IP, 0 for none
+
+// ip ratelimit struct
+struct IpRateLimit
+{
+    string ip;
+    int requestCount;
+    time_t lastRequestTime;
+};
+
+std::vector<IpRateLimit> ipRateLimits;
 
 int main(int argc, char *argv[])
 {
@@ -47,7 +59,7 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port, siteDir, Page404, useDirListing);
+    int confResult = loadConfig(port, siteDir, Page404, useDirListing, requestRateLimit);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -171,17 +183,64 @@ int main(int argc, char *argv[])
         printf("[%s] Received request from %s:%d\n", timebuf, clientIp, ntohs(client_addr.sin_port));
         fflush(stdout);
 
+        if (requestRateLimit > 0)
+        {
+            // check ip rate limit
+            time_t now = time(nullptr);
+            bool found = false;
+            for (auto &entry : ipRateLimits)
+            {
+                if (entry.ip == clientIp)
+                {
+                    found = true;
+                    if (now == entry.lastRequestTime)
+                    {
+                        entry.requestCount++;
+                    }
+                    else
+                    {
+                        entry.requestCount = 1;
+                        entry.lastRequestTime = now;
+                    }
+
+                    if (entry.requestCount > requestRateLimit)
+                    {
+                        // over limit, send 429 and close
+                        const char *hdr = "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                        send(client_fd, hdr, strlen(hdr), 0);
+                        close(client_fd);
+                        printf("[%s] Rate limit exceeded for %s\n", timebuf, clientIp);
+                        fflush(stdout);
+                        found = true;
+                        break;
+                    }
+                    break;
+                }
+            }
+            if (!found)
+            {
+                IpRateLimit newEntry{};
+                newEntry.ip = clientIp;
+                newEntry.requestCount = 1;
+                newEntry.lastRequestTime = now;
+                ipRateLimits.push_back(newEntry);
+            }
+        }
+
         // read headers/request
         char buffer[4096];
         ssize_t used = 0;
         const char *eolmark = "\r\n\r\n"; // until eol
+        bool closedEarly = false;
         while (used < (ssize_t)sizeof(buffer) - 1)
         {
             ssize_t recvd = recv(client_fd, buffer + used, sizeof(buffer) - 1 - used, 0);
             if (recvd <= 0)
             {
-                // error or closed
+                // peer closed or error, abort processing this request safely
                 close(client_fd);
+                closedEarly = true;
+                break;
             }
             used += recvd;
             buffer[used] = 0; // null terminate for strstr
@@ -189,6 +248,9 @@ int main(int argc, char *argv[])
             if (strstr(buffer, eolmark))
                 break; // got all headers
         }
+
+        if (closedEarly)
+            continue;
 
         // if header too large/malformed, close
         if (!strstr(buffer, eolmark))

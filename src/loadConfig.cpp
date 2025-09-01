@@ -6,14 +6,14 @@
 
 using namespace std;
 
-int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useDirListing)
+int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useDirListing, int &requestRateLimit)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
     {
         ofstream NewConfig(".env"); // no config
 
-        NewConfig << "PORT=8080\n"; // basic for now
+        NewConfig << "PORT=8080\nSITE_DIR=public\n404_PAGE=\nDIR_LISTING=false\nREQUEST_RATELIMIT=10";
 
         NewConfig.close();
         return 2;
@@ -56,6 +56,12 @@ int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useD
             } else {
                 useDirListing = false;
             }
+        }
+        else if (key == "REQUEST_RATELIMIT") // requests/second rate limit per IP
+        {
+            int rl = std::atoi(value.c_str());
+            if (rl >= 0) // 0 for none
+                requestRateLimit = rl;
         }
     }
     return 0;
