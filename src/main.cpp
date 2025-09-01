@@ -327,6 +327,105 @@ int main(int argc, char *argv[])
 
         // build full path inside of siteDir
         std::string fullPath = siteDir.empty() ? rel_path : (siteDir + "/" + rel_path);
+
+        struct stat pathStat{};
+        if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode))
+        {
+            bool hasTrailingSlash = (path_start[strlen(path_start) - 1] == '/');
+            if (!hasTrailingSlash)
+            {
+                // send 301 redirect to canonical slash form
+                std::string loc = std::string(path_start) + "/";
+                char hdr[512];
+                int hdrLen = snprintf(hdr, sizeof(hdr),
+                                      "HTTP/1.1 301 Moved Permanently\r\n"
+                                      "Location: %s\r\n"
+                                      "Content-Length: 0\r\n"
+                                      "Connection: close\r\n"
+                                      "\r\n",
+                                      loc.c_str());
+                if (hdrLen > 0 && hdrLen < (int)sizeof(hdr))
+                    send(client_fd, hdr, hdrLen, 0);
+                close(client_fd);
+                continue;
+            }
+
+            // try index files
+            const char *indices[] = {"index.html", "index.htm"};
+            bool servedIndex = false;
+            for (const char *idx : indices)
+            {
+                std::string idxFull = fullPath + "/" + idx;
+                int fd = open(idxFull.c_str(), O_RDONLY);
+                if (fd != -1)
+                {
+                    struct stat ist{};
+                    if (fstat(fd, &ist) == 0 && S_ISREG(ist.st_mode))
+                    {
+                        auto guessContentType = [](const char *path) -> const char *
+                        {
+                            const char *dot = strrchr(path, '.');
+                            if (!dot)
+                                return "application/octet-stream";
+                            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
+                                return "text/html";
+                            if (strcmp(dot, ".css") == 0)
+                                return "text/css";
+                            if (strcmp(dot, ".js") == 0)
+                                return "text/javascript";
+                            if (strcmp(dot, ".json") == 0)
+                                return "application/json";
+                            if (strcmp(dot, ".png") == 0)
+                                return "image/png";
+                            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
+                                return "image/jpeg";
+                            if (strcmp(dot, ".gif") == 0)
+                                return "image/gif";
+                            return "application/octet-stream";
+                        };
+                        const char *ctype = guessContentType(idxFull.c_str());
+                        char header[256];
+                        int header_len = snprintf(header, sizeof(header),
+                                                  "HTTP/1.1 200 OK\r\n"
+                                                  "Content-Length: %lld\r\n"
+                                                  "Content-Type: %s\r\n"
+                                                  "Connection: close\r\n"
+                                                  "\r\n",
+                                                  (long long)ist.st_size, ctype);
+                        if (header_len > 0 && header_len < (int)sizeof(header))
+                        {
+                            send(client_fd, header, header_len, 0);
+                            off_t off = 0;
+                            while (off < ist.st_size)
+                            {
+                                ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
+                                if (s <= 0)
+                                    break;
+                            }
+                        }
+                        close(fd);
+                        close(client_fd);
+                        servedIndex = true;
+                        break;
+                    }
+                    close(fd);
+                }
+            }
+            if (servedIndex)
+                continue;
+
+            // no index,  directory listing or 404
+            if (useDirListing)
+            {
+                // rel_path currently without leading slash already
+                returnDirListing(client_fd, siteDir, rel_path, Page404);
+            }
+            else
+            {
+                return404(client_fd, siteDir, Page404);
+            }
+            continue;
+        }
         int opened_fd = open(fullPath.c_str(), O_RDONLY);
         if (opened_fd == -1) // file not found
         {
