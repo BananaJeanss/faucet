@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <ctime>
 
 using namespace std;
 
@@ -58,7 +59,7 @@ void returnDirListing(int client_fd,
 
     std::string body = header;
     body += "<hr>"; // hr for style points cause its cool
-    body += "<tr><th>Name</th><th>Size</th></tr>";
+    body += "<tr><th>Name</th><th>Size</th><th>Date Modified</th></tr>";
     if (!relPath.empty())
     {
         body += "<tr><td><a href=\"../\">../</a></td></tr>";
@@ -108,6 +109,12 @@ void returnDirListing(int client_fd,
                 else
                     snprintf(sizeStr, sizeof(sizeStr), "%.1f %s", fsize, units[unitIdx]);
                 body += "<td>" + std::string(sizeStr) + "</td>";
+
+                // get date modified if available
+                char timebuf[64];
+                struct tm *tm_info = localtime(&st.st_mtime);
+                strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M", tm_info);
+                body += "<td>" + std::string(timebuf) + "</td>";
             }
         }
 
