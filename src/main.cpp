@@ -18,6 +18,7 @@
 #include "include/loadConfig.h"
 #include "include/return404.h"
 #include "include/returnDirListing.h"
+#include "include/contentTypes.h"
 
 using namespace std;
 
@@ -258,29 +259,7 @@ int main(int argc, char *argv[])
                     {
                         struct stat ist{};
                         if (fstat(fd, &ist) == 0 && S_ISREG(ist.st_mode))
-                        {
-                            // minimal content-type guess (reuse existing lambda style)
-                            auto guessContentType = [](const char *path) -> const char *
-                            {
-                                const char *dot = strrchr(path, '.');
-                                if (!dot)
-                                    return "application/octet-stream";
-                                if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
-                                    return "text/html";
-                                if (strcmp(dot, ".css") == 0)
-                                    return "text/css";
-                                if (strcmp(dot, ".js") == 0)
-                                    return "text/javascript";
-                                if (strcmp(dot, ".json") == 0)
-                                    return "application/json";
-                                if (strcmp(dot, ".png") == 0)
-                                    return "image/png";
-                                if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
-                                    return "image/jpeg";
-                                if (strcmp(dot, ".gif") == 0)
-                                    return "image/gif";
-                                return "application/octet-stream";
-                            };
+                        {         
                             const char *ctype = guessContentType(idxFull.c_str());
                             char header[256];
                             int header_len = snprintf(header, sizeof(header),
@@ -362,27 +341,6 @@ int main(int argc, char *argv[])
                     struct stat ist{};
                     if (fstat(fd, &ist) == 0 && S_ISREG(ist.st_mode))
                     {
-                        auto guessContentType = [](const char *path) -> const char *
-                        {
-                            const char *dot = strrchr(path, '.');
-                            if (!dot)
-                                return "application/octet-stream";
-                            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
-                                return "text/html";
-                            if (strcmp(dot, ".css") == 0)
-                                return "text/css";
-                            if (strcmp(dot, ".js") == 0)
-                                return "text/javascript";
-                            if (strcmp(dot, ".json") == 0)
-                                return "application/json";
-                            if (strcmp(dot, ".png") == 0)
-                                return "image/png";
-                            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
-                                return "image/jpeg";
-                            if (strcmp(dot, ".gif") == 0)
-                                return "image/gif";
-                            return "application/octet-stream";
-                        };
                         const char *ctype = guessContentType(idxFull.c_str());
                         char header[256];
                         int header_len = snprintf(header, sizeof(header),
@@ -451,28 +409,6 @@ int main(int argc, char *argv[])
 
         // send file
         // guess content type based on extension for proper loading in browsers
-        auto guessContentType = [](const char *path) -> const char *
-        {
-            const char *dot = strrchr(path, '.');
-            if (!dot)
-                return "application/octet-stream";
-            if (strcmp(dot, ".html") == 0 || strcmp(dot, ".htm") == 0)
-                return "text/html";
-            if (strcmp(dot, ".css") == 0)
-                return "text/css";
-            if (strcmp(dot, ".js") == 0)
-                return "text/javascript";
-            if (strcmp(dot, ".json") == 0)
-                return "application/json";
-            if (strcmp(dot, ".png") == 0)
-                return "image/png";
-            if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0)
-                return "image/jpeg";
-            if (strcmp(dot, ".gif") == 0)
-                return "image/gif";
-            return "application/octet-stream";
-        };
-
         const char *ctype = guessContentType(fullPath.c_str());
 
         char header[256];
