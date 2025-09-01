@@ -38,7 +38,7 @@ void returnDirListing(int client_fd,
     while (auto *ent = readdir(dir))
     {
         const char *name = ent->d_name;
-        if (strcmp(name, ".") == 0)
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) // skip . and .., add manually
             continue;
         entries.emplace_back(name);
     }
@@ -62,7 +62,8 @@ void returnDirListing(int client_fd,
     body += "<tr><th>Name</th><th>Size</th><th>Date Modified</th></tr>";
     if (!relPath.empty())
     {
-        body += "<tr><td><a href=\"../\">../</a></td></tr>";
+        body += "<tr><td><a href=\"/\">/</a></td></tr>"; // root
+        body += "<tr><td><a href=\"../\">../</a></td></tr>"; // parent dir
     }
 
     for (auto &e : entries)
