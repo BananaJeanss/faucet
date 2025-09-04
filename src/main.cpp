@@ -15,13 +15,14 @@
 #include <fstream>
 #include <iomanip>
 #include <cctype>
+#include <vector>
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
 #include "include/returnDirListing.h"
 #include "include/contentTypes.h"
-#include <vector>
 #include "include/returnErrorPage.h"
+#include "include/logRequest.h"
 
 using namespace std;
 
@@ -33,14 +34,15 @@ static void sig_handler(int)
 }
 
 // config values
-string loadEnv;
-int port = 8080;
-string siteDir = "public";
-string Page404 = ""; // relative to siteDir, empty for none
-bool useDirListing = false;
-int requestRateLimit = 10; // requests/second per IP, 0 for none
-string contactEmail = "";
+int port = 8080;             // port to listen on
+string siteDir = "public";   // site root directory, relative to executable
+string Page404 = "";         // relative to siteDir, empty for none
+bool useDirListing = false;  // enables directory listing
+int requestRateLimit = 10;   // requests/second per IP, 0 for none
+string contactEmail = "";    // contact email for returnErrorPage
 string authCredentials = ""; // user:password for basic auth, empty for none
+bool toggleLogging = true;   // log requests to .log file
+int logMaxLines = 5000;      // max lines in log file before rotating
 
 string authUser = "";
 string authPass = "";
@@ -109,7 +111,9 @@ int main(int argc, char *argv[])
                                 useDirListing,
                                 requestRateLimit,
                                 contactEmail,
-                                authCredentials);
+                                authCredentials,
+                                toggleLogging,
+                                logMaxLines);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -278,8 +282,10 @@ int main(int argc, char *argv[])
                     {
                         // over limit, send 429 and close
                         returnErrorPage(client_fd, 429, contactEmail);
-                        printf("[%s] Rate limit exceeded for %s\n", timebuf, clientIp);
-                        fflush(stdout);
+                        char rateExceededBuffer[256];
+                        snprintf(rateExceededBuffer, sizeof(rateExceededBuffer), "[%s] Rate limit exceeded for %s", timebuf, clientIp);
+                        string rateExceededOutput = rateExceededBuffer;
+                        logRequest(rateExceededOutput, toggleLogging, logMaxLines);
                         found = true;
                         break;
                     }
@@ -350,14 +356,20 @@ int main(int argc, char *argv[])
             if (sscanf(firstLine.c_str(), "%15s %1023s %31s", methodTok, pathTok, verTok) != 3)
             {
                 // fallback minimal logging
-                printf("[%s] [%s:%d] (malformed request line)\n",
-                       timebuf, clientIp, ntohs(client_addr.sin_port));
+                char malformedRequestLog[256];
+                snprintf(malformedRequestLog, sizeof(malformedRequestLog), "[%s] [%s:%d] (malformed request line)",
+                         timebuf, clientIp, ntohs(client_addr.sin_port));
+                string malformedRequestOutput = malformedRequestLog;
+                logRequest(malformedRequestOutput, toggleLogging, logMaxLines);
             }
             else
             {
-                printf("[%s] [%s:%d] (%s %s %s | User-Agent: %s)\n",
-                       timebuf, clientIp, ntohs(client_addr.sin_port),
-                       verTok, methodTok, pathTok, userAgent.empty() ? "" : userAgent.c_str());
+                char logBuffer[2048];
+                snprintf(logBuffer, sizeof(logBuffer), "[%s] [%s:%d] (%s %s %s | User-Agent: %s)",
+                         timebuf, clientIp, ntohs(client_addr.sin_port),
+                         verTok, methodTok, pathTok, userAgent.empty() ? "" : userAgent.c_str());
+                string logOutput = logBuffer;
+                logRequest(logOutput, toggleLogging, logMaxLines);
             }
         }
 

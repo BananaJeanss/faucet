@@ -7,4 +7,6 @@ int loadConfig(int &port,
                bool &useDirListing,
                int &requestRateLimit,
                std::string &contactEmail,
-               std::string &authCredentials);
+               std::string &authCredentials,
+               bool &toggleLogging,
+               int &logMaxLines);

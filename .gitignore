@@ -1,5 +1,8 @@
 *.out
-.env
+*.log
+*.bak
 *.o
+.env
 faucet
 public
+.vscode

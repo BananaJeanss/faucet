@@ -12,7 +12,9 @@ int loadConfig(int &port,
                bool &useDirListing,
                int &requestRateLimit,
                std::string &contactEmail,
-               std::string &authCredentials)
+               std::string &authCredentials,
+               bool &toggleLogging,
+               int &logMaxLines)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -80,6 +82,28 @@ int loadConfig(int &port,
         else if (key == "AUTH_CREDENTIALS") // HTTP Basic Auth credentials
         {
             authCredentials = value;
+        }
+        else if (key == "TOGGLE_LOGGING") // enable logging to .log file
+        {
+            for (auto &c : value)
+                c = tolower(c);
+            if (value == "true")
+            {
+                toggleLogging = true;
+            }
+            else
+            {
+                toggleLogging = false;
+            }
+        }
+        else if (key == "LOG_MAX_LINES") // max lines in log file before rotation
+        {
+            int ll = std::atoi(value.c_str());
+            if (ll >= 1) // at least 1 line
+                logMaxLines = ll;
+            else {
+                logMaxLines = 0; // no limit
+            }
         }
     }
     return 0;
