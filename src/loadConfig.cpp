@@ -56,6 +56,10 @@ int loadConfig(int &port,
         }
         else if (key == "SITE_DIR") // load site directory
         {
+            if (value == "example") // example value, warn but continue
+            {
+                std::cerr << "Warning: SITE_DIR is set to 'example'. Please change this to your site's directory name." << std::endl;
+            }
             siteDir = value;
         }
         else if (key == "404_PAGE") // load custom 404 page

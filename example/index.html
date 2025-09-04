@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>faucet example page</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <hero>
+      <h1>faucet</h1>
+      <p>A simple HTTP server</p>
+      <ul>
+        <li>
+          <a href="https://github.com/BananaJeanss/faucet">GitHub Repo</a>
+        </li>
+      </ul>
+    </hero>
+    <hr />
+    <section>
+      <h2>About</h2>
+      <p>
+        If you're reading this, you're either viewing the public example page,
+        or have setup faucet correctly. <br /><br />
+        faucet is a pretty basic HTTP server for Linux (no Windows support yet),
+        written in c++. It features basic functionality such as:
+      </p>
+      <ul>
+        <li>Serving static files</li>
+        <li>Directory listing</li>
+        <li>Logging requests</li>
+        <li>Ratelimiting</li>
+        <li>Custom 404 page</li>
+        <li>Many .env options</li>
+        <li>And more?</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Directory Listing</h2>
+      <p>
+        A totally never seen before feature! Click the link below to see some
+        example files/folders.
+      </p>
+      <a href="/files">Go to /files</a>
+    </section>
+    <section>
+      <h2>404 custom page</h2>
+      <p>
+        Custom 404 page support? Unheard of! Click the link below to see it in
+        action.
+      </p>
+      <a href="/mjisbetterthanlebron">Go to a non-existent page</a>
+    </section>
+    <section>
+      <h2>Ratelimits</h2>
+      <p>
+        Hold your horses! Faucet has a .env option for requests per second
+        ratelimiting.
+      </p>
+      <p>
+        There's no link to try this out, just click the refresh button as fast
+        as you can.
+      </p>
+    </section>
+    <section>
+      <h2>I'm a teapot?</h2>
+      <p>WHAT!!! There's no possible way faucet is a teapot! Or is it?</p>
+      <a href="/imateapot418">This totally does not lead to a teapot</a>
+    </section>
+  </body>
+</html>

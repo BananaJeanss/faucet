@@ -36,5 +36,7 @@ inline const char *guessContentType(const char *path)
         return "video/mp4";
     if (strcmp(dot, ".webm") == 0)
         return "video/webm";
+    if (strcmp(dot, ".webp") == 0)
+        return "image/webp";
     return "application/octet-stream";
 }
