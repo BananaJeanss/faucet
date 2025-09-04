@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
 
-    printf("faucet http server\n");
+    printf("{{ faucet http server }}\n");
 
     // load config
     int confResult = loadConfig(port,
@@ -133,7 +133,6 @@ int main(int argc, char *argv[])
             {
                 authEnabled = true;
                 expectedAuthValue = std::string("Basic ") + base64Encode(authUser + ":" + authPass);
-                printf("HTTP Auth Enabled (user: %s)\n", authUser.c_str());
             }
         }
     }
@@ -208,7 +207,11 @@ int main(int argc, char *argv[])
 
     char ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
-    printf("Listening on %s:%d, serving from %s\n", ip, ntohs(addr.sin_port), siteDir.c_str());
+    printf("Listening on %s:%d, serving from %s. %s\n",
+           ip,
+           ntohs(addr.sin_port),
+           siteDir.c_str(),
+           authEnabled ? ("Authentication enabled (user: " + authUser + ")").c_str() : "");
     fflush(stdout);
 
     // listen
@@ -250,9 +253,6 @@ int main(int argc, char *argv[])
         auto tm = *localtime(&t);
         char timebuf[32];
         strftime(timebuf, sizeof(timebuf), "%d-%m-%Y %H:%M:%S", &tm);
-
-        printf("[%s] Received request from %s:%d\n", timebuf, clientIp, ntohs(client_addr.sin_port));
-        fflush(stdout);
 
         if (requestRateLimit > 0)
         {
@@ -318,6 +318,49 @@ int main(int argc, char *argv[])
                 break; // got all headers
         }
 
+        // get basic info from buffer
+        {
+            char methodTok[16] = {0};
+            char pathTok[1024] = {0};
+            char verTok[32] = {0};
+            // only scan up to first line
+            const char *lineEnd = strstr(buffer, "\r\n");
+            std::string firstLine;
+            if (lineEnd)
+                firstLine.assign(buffer, lineEnd - buffer);
+            else
+                firstLine.assign(buffer); // fallback
+
+            // extract User-Agent header
+            const char *userAgentKey = "User-Agent:";
+            const char *userAgentStart = strcasestr(buffer, userAgentKey);
+            string userAgent;
+            if (userAgentStart)
+            {
+                userAgentStart += strlen(userAgentKey);
+                while (*userAgentStart == ' ' || *userAgentStart == '\t')
+                    userAgentStart++; // skip leading spaces/tabs
+                const char *userAgentEnd = strstr(userAgentStart, "\r\n");
+                if (userAgentEnd)
+                {
+                    userAgent.assign(userAgentStart, userAgentEnd - userAgentStart);
+                }
+            }
+
+            if (sscanf(firstLine.c_str(), "%15s %1023s %31s", methodTok, pathTok, verTok) != 3)
+            {
+                // fallback minimal logging
+                printf("[%s] [%s:%d] (malformed request line)\n",
+                       timebuf, clientIp, ntohs(client_addr.sin_port));
+            }
+            else
+            {
+                printf("[%s] [%s:%d] (%s %s %s | User-Agent: %s)\n",
+                       timebuf, clientIp, ntohs(client_addr.sin_port),
+                       verTok, methodTok, pathTok, userAgent.empty() ? "" : userAgent.c_str());
+            }
+        }
+
         if (closedEarly)
             continue;
 
@@ -377,7 +420,6 @@ int main(int argc, char *argv[])
                                 value.erase(0, 1);
                             if (value == expectedAuthValue)
                             {
-                                printf("Auth success for %s\n", clientIp);
                                 authOk = true;
                             }
                         }
@@ -391,7 +433,6 @@ int main(int argc, char *argv[])
             if (!authOk)
             {
                 returnErrorPage(client_fd, 401, contactEmail);
-                printf("Auth failed for %s\n", clientIp);
                 continue;
             }
         }
