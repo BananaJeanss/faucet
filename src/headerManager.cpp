@@ -15,7 +15,6 @@ static string addHeaderBeforeEnding(const string &header, const string &toAdd)
 string headerManager(const string &header) // expects a header and just adds extra stuff to it
 {
     string modifiedHeader = header;
-    printf("headerManager is working debug delete this yadayada\n");
 
     // start off by validating the header, checking common headers and /r/n/r/n ending
     if (modifiedHeader.size() < 16) // minimum valid header size
