@@ -1,4 +1,5 @@
 #include "include/returnErrorPage.h"
+#include "include/headerManager.h"
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -72,6 +73,19 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
         header += "\r\nContent-Length: ";
         header += to_string(body.size());
         header += "\r\nConnection: close\r\n\r\n";
+        header = headerManager(header);
+        if (header == "invalid")
+        {
+            // fallback
+            printf("Invalid header generated in returnErrorPage, using fallback 1.\n");
+            header = "HTTP/1.1 401 Unauthorized\r\n"
+                     "WWW-Authenticate: Basic realm=\"faucet\"\r\n"
+                     "Cache-Control: no-store\r\n"
+                     "Content-Type: text/html; charset=utf-8\r\n"
+                     "Content-Length: " +
+                     to_string(body.size()) +
+                     "\r\nConnection: close\r\n\r\n";
+        }
     }
     else
     {
@@ -81,6 +95,17 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
         header += "\r\nContent-Length: ";
         header += to_string(body.size());
         header += "\r\nConnection: close\r\n\r\n";
+        header = headerManager(header);
+        if (header == "invalid")
+        {
+            // fallback
+            printf("Invalid header generated in returnErrorPage, using fallback 2.\n");
+            header = "HTTP/1.1 " + to_string(errorType) + " " + errorText + "\r\n"
+                                                                            "Content-Type: text/html; charset=utf-8\r\n"
+                                                                            "Content-Length: " +
+                     to_string(body.size()) +
+                     "\r\nConnection: close\r\n\r\n";
+        }
     }
 
     string response = header + body;

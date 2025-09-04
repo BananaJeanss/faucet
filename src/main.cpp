@@ -23,6 +23,7 @@
 #include "include/contentTypes.h"
 #include "include/returnErrorPage.h"
 #include "include/logRequest.h"
+#include "include/headerManager.h"
 
 using namespace std;
 
@@ -521,9 +522,48 @@ int main(int argc, char *argv[])
                                                       "Connection: close\r\n"
                                                       "\r\n",
                                                       (long long)ist.st_size, ctype);
+                            std::string tempHeader = headerManager(header);
+                            if (tempHeader == "invalid")
+                            {
+                                // fallback
+                                printf("Invalid header generated in main when serving index, using fallback 3.\n");
+                                header_len = snprintf(header, sizeof(header),
+                                                      "HTTP/1.1 200 OK\r\n"
+                                                      "Content-Length: %lld\r\n"
+                                                      "Content-Type: text/html; charset=utf-8\r\n"
+                                                      "Connection: close\r\n"
+                                                      "\r\n",
+                                                      (long long)ist.st_size);
+                            }
+                            else
+                            {
+                                // ensure fits buffer else send directly
+                                if (tempHeader.size() < sizeof(header))
+                                {
+                                    memcpy(header, tempHeader.c_str(), tempHeader.size() + 1);
+                                    header_len = (int)tempHeader.size();
+                                }
+                                else
+                                {
+                                    // send directly and skip buffer usage
+                                    send(client_fd, tempHeader.c_str(), tempHeader.size(), 0);
+                                    header_len = -1; // mark as sent
+                                }
+                            }
                             if (header_len > 0 && header_len < (int)sizeof(header))
                             {
                                 send(client_fd, header, header_len, 0);
+                                off_t off = 0;
+                                while (off < ist.st_size)
+                                {
+                                    ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
+                                    if (s <= 0)
+                                        break;
+                                }
+                            }
+                            else if (header_len == -1)
+                            {
+                                // header already sent, now send body
                                 off_t off = 0;
                                 while (off < ist.st_size)
                                 {
@@ -602,9 +642,45 @@ int main(int argc, char *argv[])
                                                   "Connection: close\r\n"
                                                   "\r\n",
                                                   (long long)ist.st_size, ctype);
+                        std::string tempHeader = headerManager(header);
+                        if (tempHeader == "invalid")
+                        {
+                            // fallback
+                            printf("Invalid header generated in main when serving index, using fallback 4.\n");
+                            header_len = snprintf(header, sizeof(header),
+                                                  "HTTP/1.1 200 OK\r\n"
+                                                  "Content-Length: %lld\r\n"
+                                                  "Content-Type: text/html; charset=utf-8\r\n"
+                                                  "Connection: close\r\n"
+                                                  "\r\n",
+                                                  (long long)ist.st_size);
+                        }
+                        else
+                        {
+                            if (tempHeader.size() < sizeof(header))
+                            {
+                                memcpy(header, tempHeader.c_str(), tempHeader.size() + 1);
+                                header_len = (int)tempHeader.size();
+                            }
+                            else
+                            {
+                                send(client_fd, tempHeader.c_str(), tempHeader.size(), 0);
+                                header_len = -1;
+                            }
+                        }
                         if (header_len > 0 && header_len < (int)sizeof(header))
                         {
                             send(client_fd, header, header_len, 0);
+                            off_t off = 0;
+                            while (off < ist.st_size)
+                            {
+                                ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
+                                if (s <= 0)
+                                    break;
+                            }
+                        }
+                        else if (header_len == -1)
+                        {
                             off_t off = 0;
                             while (off < ist.st_size)
                             {
@@ -671,13 +747,46 @@ int main(int argc, char *argv[])
                                   "Connection: close\r\n"
                                   "\r\n",
                                   (long long)st.st_size, ctype);
-        if (header_len < 0 || header_len >= (int)sizeof(header))
+        std::string tempHeader = headerManager(header);
+        if (tempHeader == "invalid")
+        {
+            // fallback
+            printf("Invalid header generated in main when serving file, using fallback 5.\n");
+            header_len = snprintf(header, sizeof(header),
+                                  "HTTP/1.1 200 OK\r\n"
+                                  "Content-Length: %lld\r\n"
+                                  "Content-Type: text/html; charset=utf-8\r\n"
+                                  "Connection: close\r\n"
+                                  "\r\n",
+                                  (long long)st.st_size);
+        }
+        else
+        {
+            if (tempHeader.size() < sizeof(header))
+            {
+                memcpy(header, tempHeader.c_str(), tempHeader.size() + 1);
+                header_len = (int)tempHeader.size();
+            }
+            else
+            {
+                send(client_fd, tempHeader.c_str(), tempHeader.size(), 0);
+                header_len = -1;
+            }
+        }
+        if (header_len < 0)
+        {
+            // already sent header
+        }
+        else if (header_len >= (int)sizeof(header))
         {
             close(opened_fd);
             close(client_fd);
             continue;
         }
-        send(client_fd, header, header_len, 0);
+        else
+        {
+            send(client_fd, header, header_len, 0);
+        }
 
         // send full file
         off_t offset = 0;
