@@ -136,7 +136,9 @@ int main(int argc, char *argv[])
                 printf("HTTP Auth Enabled (user: %s)\n", authUser.c_str());
             }
         }
-    } else {
+    }
+    else
+    {
         authEnabled = false; // false anyways but whatever
     }
 
@@ -374,8 +376,10 @@ int main(int argc, char *argv[])
                             while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
                                 value.erase(0, 1);
                             if (value == expectedAuthValue)
-                                printf("  Auth success for %s\n", clientIp);
+                            {
+                                printf("Auth success for %s\n", clientIp);
                                 authOk = true;
+                            }
                         }
                         break;
                     }
@@ -386,14 +390,8 @@ int main(int argc, char *argv[])
             }
             if (!authOk)
             {
-                const char *hdr = "HTTP/1.1 401 Unauthorized\r\n"
-                                  "WWW-Authenticate: Basic realm=\"faucet\"\r\n"
-                                  "Cache-Control: no-store\r\n"
-                                  "Content-Length: 0\r\n"
-                                  "Connection: close\r\n"
-                                  "\r\n";
-                send(client_fd, hdr, strlen(hdr), 0);
-                close(client_fd);
+                returnErrorPage(client_fd, 401, contactEmail);
+                printf("Auth failed for %s\n", clientIp);
                 continue;
             }
         }

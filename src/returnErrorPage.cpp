@@ -22,6 +22,9 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
     case 400:
         errorText = "Bad Request";
         break;
+    case 401:
+        errorText = "Unauthorized";
+        break;
     case 403:
         errorText = "Forbidden";
         break;
@@ -58,12 +61,27 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
         body.replace(pos, 15, errorText); // just errortext without br and contact
 
     // HTTP header
-    string header = "HTTP/1.1 " + to_string(errorType) + " " + errorText + "\r\n";
-    header += "Content-Type: ";
-    header += ctype;
-    header += "\r\nContent-Length: ";
-    header += to_string(body.size());
-    header += "\r\nConnection: close\r\n\r\n";
+    string header;
+    if (errorType == 401)
+    {
+        header = "HTTP/1.1 401 Unauthorized\r\n";
+        header += "WWW-Authenticate: Basic realm=\"faucet\"\r\n";
+        header += "Cache-Control: no-store\r\n";
+        header += "Content-Type: ";
+        header += ctype;
+        header += "\r\nContent-Length: ";
+        header += to_string(body.size());
+        header += "\r\nConnection: close\r\n\r\n";
+    }
+    else
+    {
+        header = "HTTP/1.1 " + to_string(errorType) + " " + errorText + "\r\n";
+        header += "Content-Type: ";
+        header += ctype;
+        header += "\r\nContent-Length: ";
+        header += to_string(body.size());
+        header += "\r\nConnection: close\r\n\r\n";
+    }
 
     string response = header + body;
 
