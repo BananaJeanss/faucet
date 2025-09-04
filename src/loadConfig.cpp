@@ -11,7 +11,8 @@ int loadConfig(int &port,
                std::string &Page404,
                bool &useDirListing,
                int &requestRateLimit,
-               std::string &contactEmail)
+               std::string &contactEmail,
+               std::string &authCredentials)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -36,6 +37,7 @@ int loadConfig(int &port,
 
         std::string key = line.substr(0, eqPos);
         std::string value = line.substr(eqPos + 1);
+
 
         if (key == "PORT") // load port, command arg overrides
         {
@@ -74,6 +76,10 @@ int loadConfig(int &port,
         else if (key == "CONTACT_EMAIL") // contact email for error pages
         {
             contactEmail = value;
+        }
+        else if (key == "AUTH_CREDENTIALS") // HTTP Basic Auth credentials
+        {
+            authCredentials = value;
         }
     }
     return 0;

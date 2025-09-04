@@ -6,4 +6,5 @@ int loadConfig(int &port,
                std::string &Page404,
                bool &useDirListing,
                int &requestRateLimit,
-               std::string &contactEmail);
+               std::string &contactEmail,
+               std::string &authCredentials);

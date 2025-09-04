@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <cctype>
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
@@ -39,6 +40,12 @@ string Page404 = ""; // relative to siteDir, empty for none
 bool useDirListing = false;
 int requestRateLimit = 10; // requests/second per IP, 0 for none
 string contactEmail = "";
+string authCredentials = ""; // user:password for basic auth, empty for none
+
+string authUser = "";
+string authPass = "";
+bool authEnabled = false;
+std::string expectedAuthValue; // basic base64
 
 // ip ratelimit struct
 struct IpRateLimit
@@ -49,6 +56,41 @@ struct IpRateLimit
 };
 
 std::vector<IpRateLimit> ipRateLimits;
+
+// base64 encoder for auth
+static std::string base64Encode(const std::string &in)
+{
+    static const char *tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((in.size() + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 2 < in.size())
+    {
+        unsigned int n = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8 | (unsigned char)in[i + 2];
+        out.push_back(tbl[(n >> 18) & 63]);
+        out.push_back(tbl[(n >> 12) & 63]);
+        out.push_back(tbl[(n >> 6) & 63]);
+        out.push_back(tbl[n & 63]);
+        i += 3;
+    }
+    if (i + 1 < in.size())
+    {
+        unsigned int n = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8;
+        out.push_back(tbl[(n >> 18) & 63]);
+        out.push_back(tbl[(n >> 12) & 63]);
+        out.push_back(tbl[(n >> 6) & 63]);
+        out.push_back('=');
+    }
+    else if (i < in.size())
+    {
+        unsigned int n = (unsigned char)in[i] << 16;
+        out.push_back(tbl[(n >> 18) & 63]);
+        out.push_back(tbl[(n >> 12) & 63]);
+        out.push_back('=');
+        out.push_back('=');
+    }
+    return out;
+}
 
 int main(int argc, char *argv[])
 {
@@ -61,7 +103,13 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port, siteDir, Page404, useDirListing, requestRateLimit, contactEmail);
+    int confResult = loadConfig(port,
+                                siteDir,
+                                Page404,
+                                useDirListing,
+                                requestRateLimit,
+                                contactEmail,
+                                authCredentials);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -71,6 +119,25 @@ int main(int argc, char *argv[])
     {
         printf("No config found, created default .env file.\n");
         printf("Continuing with defaults...\n");
+    }
+
+    // convert authCredentials to authuser/authpass
+    if (!authCredentials.empty())
+    {
+        size_t colonPos = authCredentials.find(':');
+        if (colonPos != std::string::npos)
+        {
+            authUser = authCredentials.substr(0, colonPos);
+            authPass = authCredentials.substr(colonPos + 1);
+            if (!authUser.empty() && !authPass.empty())
+            {
+                authEnabled = true;
+                expectedAuthValue = std::string("Basic ") + base64Encode(authUser + ":" + authPass);
+                printf("HTTP Auth Enabled (user: %s)\n", authUser.c_str());
+            }
+        }
+    } else {
+        authEnabled = false; // false anyways but whatever
     }
 
     // normalize siteDir
@@ -267,6 +334,70 @@ int main(int argc, char *argv[])
             continue;
         }
 
+        // if auth enabled, check for correct auth header
+        if (authEnabled)
+        {
+            // Extract headers as string
+            const char *hdrEnd = strstr(buffer, "\r\n\r\n");
+            size_t headerLen = hdrEnd ? (size_t)(hdrEnd - buffer) : (size_t)used;
+            std::string headers(buffer, headerLen);
+
+            bool authOk = false;
+            size_t lineStart = 0;
+            while (lineStart < headers.size())
+            {
+                size_t lineEnd = headers.find("\r\n", lineStart);
+                if (lineEnd == std::string::npos)
+                    lineEnd = headers.size();
+                std::string line = headers.substr(lineStart, lineEnd - lineStart);
+                // case-insensitive check for Authorization:
+                if (line.size() >= 14) // minimum length
+                {
+                    bool isAuth = true;
+                    const std::string key = "authorization:"; // lower
+                    for (size_t k = 0; k < key.size() && k < line.size(); ++k)
+                    {
+                        if (std::tolower((unsigned char)line[k]) != key[k])
+                        {
+                            isAuth = false;
+                            break;
+                        }
+                    }
+                    if (isAuth)
+                    {
+                        // get value after colon
+                        size_t colon = line.find(':');
+                        if (colon != std::string::npos)
+                        {
+                            std::string value = line.substr(colon + 1);
+                            // trim leading spaces
+                            while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
+                                value.erase(0, 1);
+                            if (value == expectedAuthValue)
+                                printf("  Auth success for %s\n", clientIp);
+                                authOk = true;
+                        }
+                        break;
+                    }
+                }
+                if (lineEnd == headers.size())
+                    break;
+                lineStart = lineEnd + 2; // skip CRLF
+            }
+            if (!authOk)
+            {
+                const char *hdr = "HTTP/1.1 401 Unauthorized\r\n"
+                                  "WWW-Authenticate: Basic realm=\"faucet\"\r\n"
+                                  "Cache-Control: no-store\r\n"
+                                  "Content-Length: 0\r\n"
+                                  "Connection: close\r\n"
+                                  "\r\n";
+                send(client_fd, hdr, strlen(hdr), 0);
+                close(client_fd);
+                continue;
+            }
+        }
+
         char *path_start = buffer + 4; // after GET
         char *path_end = strchr(path_start, ' ');
         if (!path_end) // malformed
@@ -329,7 +460,7 @@ int main(int argc, char *argv[])
                     {
                         struct stat ist{};
                         if (fstat(fd, &ist) == 0 && S_ISREG(ist.st_mode))
-                        {         
+                        {
                             const char *ctype = guessContentType(idxFull.c_str());
                             char header[256];
                             int header_len = snprintf(header, sizeof(header),
