@@ -103,6 +103,14 @@ int main(int argc, char *argv[])
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
 
+    // Ignore SIGPIPE so that aborted client connections during large file/video 
+    // transfers don't terminate the process
+    struct sigaction sa_pipe{};
+    sa_pipe.sa_handler = SIG_IGN;
+    sigemptyset(&sa_pipe.sa_mask);
+    sa_pipe.sa_flags = 0;
+    sigaction(SIGPIPE, &sa_pipe, nullptr);
+
     printf("{{ faucet http server }}\n");
 
     // load config
@@ -558,7 +566,11 @@ int main(int argc, char *argv[])
                                 {
                                     ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
                                     if (s <= 0)
+                                    {
+                                        if (s < 0 && (errno == EPIPE || errno == ECONNRESET))
+                                            break; // client went away
                                         break;
+                                    }
                                 }
                             }
                             else if (header_len == -1)
@@ -569,7 +581,11 @@ int main(int argc, char *argv[])
                                 {
                                     ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
                                     if (s <= 0)
+                                    {
+                                        if (s < 0 && (errno == EPIPE || errno == ECONNRESET))
+                                            break;
                                         break;
+                                    }
                                 }
                             }
                             close(fd);
@@ -676,7 +692,11 @@ int main(int argc, char *argv[])
                             {
                                 ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
                                 if (s <= 0)
+                                {
+                                    if (s < 0 && (errno == EPIPE || errno == ECONNRESET))
+                                        break;
                                     break;
+                                }
                             }
                         }
                         else if (header_len == -1)
@@ -686,7 +706,11 @@ int main(int argc, char *argv[])
                             {
                                 ssize_t s = sendfile(client_fd, fd, &off, ist.st_size - off);
                                 if (s <= 0)
+                                {
+                                    if (s < 0 && (errno == EPIPE || errno == ECONNRESET))
+                                        break;
                                     break;
+                                }
                             }
                         }
                         close(fd);
@@ -794,7 +818,11 @@ int main(int argc, char *argv[])
         {
             ssize_t sent = sendfile(client_fd, opened_fd, &offset, st.st_size - offset);
             if (sent <= 0)
+            {
+                if (sent < 0 && (errno == EPIPE || errno == ECONNRESET))
+                    break; // client closed connection
                 break; // error or EOF
+            }
         }
 
         // close connections
