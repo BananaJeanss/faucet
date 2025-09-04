@@ -44,6 +44,7 @@ string contactEmail = "";    // contact email for returnErrorPage
 string authCredentials = ""; // user:password for basic auth, empty for none
 bool toggleLogging = true;   // log requests to .log file
 int logMaxLines = 5000;      // max lines in log file before rotating
+bool trustXRealIp = false;   // trust X-Real-IP header from reverse proxy
 
 string authUser = "";
 string authPass = "";
@@ -103,7 +104,7 @@ int main(int argc, char *argv[])
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
 
-    // Ignore SIGPIPE so that aborted client connections during large file/video 
+    // Ignore SIGPIPE so that aborted client connections during large file/video
     // transfers don't terminate the process
     struct sigaction sa_pipe{};
     sa_pipe.sa_handler = SIG_IGN;
@@ -122,7 +123,8 @@ int main(int argc, char *argv[])
                                 contactEmail,
                                 authCredentials,
                                 toggleLogging,
-                                logMaxLines);
+                                logMaxLines,
+                                trustXRealIp);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -267,50 +269,6 @@ int main(int argc, char *argv[])
         char timebuf[32];
         strftime(timebuf, sizeof(timebuf), "%d-%m-%Y %H:%M:%S", &tm);
 
-        if (requestRateLimit > 0)
-        {
-            // check ip rate limit
-            time_t now = time(nullptr);
-            bool found = false;
-            for (auto &entry : ipRateLimits)
-            {
-                if (entry.ip == clientIp)
-                {
-                    found = true;
-                    if (now == entry.lastRequestTime)
-                    {
-                        entry.requestCount++;
-                    }
-                    else
-                    {
-                        entry.requestCount = 1;
-                        entry.lastRequestTime = now;
-                    }
-
-                    if (entry.requestCount > requestRateLimit)
-                    {
-                        // over limit, send 429 and close
-                        returnErrorPage(client_fd, 429, contactEmail);
-                        char rateExceededBuffer[256];
-                        snprintf(rateExceededBuffer, sizeof(rateExceededBuffer), "[%s] Rate limit exceeded for %s", timebuf, clientIp);
-                        string rateExceededOutput = rateExceededBuffer;
-                        logRequest(rateExceededOutput, toggleLogging, logMaxLines);
-                        found = true;
-                        break;
-                    }
-                    break;
-                }
-            }
-            if (!found)
-            {
-                IpRateLimit newEntry{};
-                newEntry.ip = clientIp;
-                newEntry.requestCount = 1;
-                newEntry.lastRequestTime = now;
-                ipRateLimits.push_back(newEntry);
-            }
-        }
-
         // read headers/request
         char buffer[4096];
         ssize_t used = 0;
@@ -331,6 +289,87 @@ int main(int argc, char *argv[])
 
             if (strstr(buffer, eolmark))
                 break; // got all headers
+        }
+
+        string effectiveClientIp = clientIp;
+
+        if (trustXRealIp) // if enabled, try to extract X-Real-IP header, and use that as the effective client IP
+        {
+            // try to extract X-Real-IP header
+            const char *xripKey = "X-Real-IP:";
+            const char *xripStart = strcasestr(buffer, xripKey);
+            if (xripStart)
+            {
+                xripStart += strlen(xripKey);
+                while (*xripStart == ' ' || *xripStart == '\t')
+                    xripStart++; // skip leading spaces/tabs
+                const char *xripEnd = strstr(xripStart, "\r\n");
+                if (xripEnd)
+                {
+                    std::string xrip(xripStart, xripEnd - xripStart);
+                    // validate basic IPv4 format
+                    int dots = 0;
+                    bool valid = true;
+                    for (char c : xrip)
+                    {
+                        if (c == '.')
+                            dots++;
+                        else if (!isdigit((unsigned char)c))
+                        {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    if (valid && dots == 3)
+                    {
+                        effectiveClientIp = xrip;
+                    }
+                }
+            }
+        }
+
+        if (requestRateLimit > 0)
+        {
+            // check ip rate limit
+            time_t now = time(nullptr);
+            bool found = false;
+            for (auto &entry : ipRateLimits)
+            {
+                if (entry.ip == effectiveClientIp)
+                {
+                    found = true;
+                    if (now == entry.lastRequestTime)
+                    {
+                        entry.requestCount++;
+                    }
+                    else
+                    {
+                        entry.requestCount = 1;
+                        entry.lastRequestTime = now;
+                    }
+
+                    if (entry.requestCount > requestRateLimit)
+                    {
+                        // over limit, send 429 and close
+                        returnErrorPage(client_fd, 429, contactEmail);
+                        char rateExceededBuffer[256];
+                        snprintf(rateExceededBuffer, sizeof(rateExceededBuffer), "[%s] Rate limit exceeded for %s", timebuf, effectiveClientIp.c_str());
+                        string rateExceededOutput = rateExceededBuffer;
+                        logRequest(rateExceededOutput, toggleLogging, logMaxLines);
+                        found = true;
+                        break;
+                    }
+                    break;
+                }
+            }
+            if (!found)
+            {
+                IpRateLimit newEntry{};
+                newEntry.ip = effectiveClientIp;
+                newEntry.requestCount = 1;
+                newEntry.lastRequestTime = now;
+                ipRateLimits.push_back(newEntry);
+            }
         }
 
         // get basic info from buffer
@@ -367,7 +406,7 @@ int main(int argc, char *argv[])
                 // fallback minimal logging
                 char malformedRequestLog[256];
                 snprintf(malformedRequestLog, sizeof(malformedRequestLog), "[%s] [%s:%d] (malformed request line)",
-                         timebuf, clientIp, ntohs(client_addr.sin_port));
+                         timebuf, effectiveClientIp.c_str(), ntohs(client_addr.sin_port));
                 string malformedRequestOutput = malformedRequestLog;
                 logRequest(malformedRequestOutput, toggleLogging, logMaxLines);
             }
@@ -375,7 +414,7 @@ int main(int argc, char *argv[])
             {
                 char logBuffer[2048];
                 snprintf(logBuffer, sizeof(logBuffer), "[%s] [%s:%d] (%s %s %s | User-Agent: %s)",
-                         timebuf, clientIp, ntohs(client_addr.sin_port),
+                         timebuf, effectiveClientIp.c_str(), ntohs(client_addr.sin_port),
                          verTok, methodTok, pathTok, userAgent.empty() ? "" : userAgent.c_str());
                 string logOutput = logBuffer;
                 logRequest(logOutput, toggleLogging, logMaxLines);
@@ -821,7 +860,7 @@ int main(int argc, char *argv[])
             {
                 if (sent < 0 && (errno == EPIPE || errno == ECONNRESET))
                     break; // client closed connection
-                break; // error or EOF
+                break;     // error or EOF
             }
         }
 

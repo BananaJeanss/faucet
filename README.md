@@ -124,6 +124,11 @@ faucet is a simple HTTP server written in C++ for Linux. It's intended to be bas
 
 `LOG_MAX_LINES` - Maximum lines in the log file before rotating (default: 5000)
 
+`TRUST_XREALIP` - Trust the `X-Real-IP` header from reverse proxies (default: false)
+
+> [!CAUTION]
+> Enabling this option may be unsafe if the server is not behind a trusted reverse proxy, as it allows clients to spoof their IP address. Use with caution.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to:

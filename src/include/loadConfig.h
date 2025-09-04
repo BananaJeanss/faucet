@@ -9,4 +9,5 @@ int loadConfig(int &port,
                std::string &contactEmail,
                std::string &authCredentials,
                bool &toggleLogging,
-               int &logMaxLines);
+               int &logMaxLines,
+               bool &trustXRealIp);

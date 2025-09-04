@@ -14,22 +14,24 @@ int loadConfig(int &port,
                std::string &contactEmail,
                std::string &authCredentials,
                bool &toggleLogging,
-               int &logMaxLines)
+               int &logMaxLines,
+               bool &trustXRealIp)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
     {
         ofstream NewConfig(".env"); // no config
 
-        NewConfig << "PORT=8080\n"
-                       "SITE_DIR=public\n"
-                       "404_PAGE=\n"
-                       "DIR_LISTING=false\n"
-                       "REQUEST_RATELIMIT=10\n"
-                       "CONTACT_EMAIL=\n"
-                       "AUTH_CREDENTIALS=\n"
-                       "TOGGLE_LOGGING=false\n"
-                       "LOG_MAX_LINES=5000\n"; // create default config
+        NewConfig << "PORT=8080\n" // create default config
+                     "SITE_DIR=public\n"
+                     "404_PAGE=\n"
+                     "DIR_LISTING=false\n"
+                     "REQUEST_RATELIMIT=10\n"
+                     "CONTACT_EMAIL=\n"
+                     "AUTH_CREDENTIALS=\n"
+                     "TOGGLE_LOGGING=false\n"
+                     "LOG_MAX_LINES=5000\n"
+                     "TRUST_XREALIP=false\n";
 
         NewConfig.close();
         return 2;
@@ -115,6 +117,19 @@ int loadConfig(int &port,
             else
             {
                 logMaxLines = 0; // no limit
+            }
+        }
+        else if (key == "TRUST_XREALIP") // trust X-Real-IP header from reverse proxy
+        {
+            for (auto &c : value)
+                c = tolower(c);
+            if (value == "true")
+            {
+                trustXRealIp = true;
+            }
+            else
+            {
+                trustXRealIp = false;
             }
         }
     }
