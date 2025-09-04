@@ -293,38 +293,60 @@ int main(int argc, char *argv[])
 
         string effectiveClientIp = clientIp;
 
-        if (trustXRealIp) // if enabled, try to extract X-Real-IP header, and use that as the effective client IP
+        if (trustXRealIp) // if enabled, try to extract proxy-provided client IP
         {
-            // try to extract X-Real-IP header
-            const char *xripKey = "X-Real-IP:";
-            const char *xripStart = strcasestr(buffer, xripKey);
-            if (xripStart)
+            auto extractHeader = [&](const char *name) -> std::string
             {
-                xripStart += strlen(xripKey);
-                while (*xripStart == ' ' || *xripStart == '\t')
-                    xripStart++; // skip leading spaces/tabs
-                const char *xripEnd = strstr(xripStart, "\r\n");
-                if (xripEnd)
+                size_t nameLen = strlen(name);
+                const char *p = buffer;
+                while (true)
                 {
-                    std::string xrip(xripStart, xripEnd - xripStart);
-                    // validate basic IPv4 format
-                    int dots = 0;
-                    bool valid = true;
-                    for (char c : xrip)
+                    const char *lineEnd = strstr(p, "\r\n");
+                    if (!lineEnd)
+                        break;
+                    if (lineEnd == p)
+                        break; // blank line -> end of headers
+                    if (strncasecmp(p, name, nameLen) == 0)
                     {
-                        if (c == '.')
-                            dots++;
-                        else if (!isdigit((unsigned char)c))
-                        {
-                            valid = false;
-                            break;
-                        }
+                        const char *valStart = p + nameLen;
+                        while (*valStart == ' ' || *valStart == '\t')
+                            ++valStart;
+                        std::string val(valStart, lineEnd - valStart);
+                        // trim trailing spaces/tabs
+                        while (!val.empty() && (val.back() == ' ' || val.back() == '\t'))
+                            val.pop_back();
+                        return val;
                     }
-                    if (valid && dots == 3)
-                    {
-                        effectiveClientIp = xrip;
-                    }
+                    p = lineEnd + 2;
                 }
+                return "";
+            };
+
+            std::string candidate = extractHeader("X-Real-IP:");
+            if (candidate.empty())
+            {
+                std::string xff = extractHeader("X-Forwarded-For:");
+                if (!xff.empty())
+                {
+                    // Take first IP before a comma
+                    size_t comma = xff.find(',');
+                    candidate = (comma == std::string::npos) ? xff : xff.substr(0, comma);
+                    // trim spaces
+                    while (!candidate.empty() && isspace((unsigned char)candidate.front()))
+                        candidate.erase(0, 1);
+                    while (!candidate.empty() && isspace((unsigned char)candidate.back()))
+                        candidate.pop_back();
+                }
+            }
+
+            if (!candidate.empty())
+            {
+                // Validate IPv4 or IPv6
+                unsigned char tmp[sizeof(struct in6_addr)];
+                bool ok = (inet_pton(AF_INET, candidate.c_str(), tmp) == 1) ||
+                          (inet_pton(AF_INET6, candidate.c_str(), tmp) == 1);
+                if (ok)
+                    effectiveClientIp = candidate;
             }
         }
 
