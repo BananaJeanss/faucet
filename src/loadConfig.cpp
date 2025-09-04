@@ -21,7 +21,15 @@ int loadConfig(int &port,
     {
         ofstream NewConfig(".env"); // no config
 
-        NewConfig << "PORT=8080\nSITE_DIR=public\n404_PAGE=\nDIR_LISTING=false\nREQUEST_RATELIMIT=10";
+        NewConfig << "PORT=8080\n"
+                       "SITE_DIR=public\n"
+                       "404_PAGE=\n"
+                       "DIR_LISTING=false\n"
+                       "REQUEST_RATELIMIT=10\n"
+                       "CONTACT_EMAIL=\n"
+                       "AUTH_CREDENTIALS=\n"
+                       "TOGGLE_LOGGING=false\n"
+                       "LOG_MAX_LINES=5000\n"; // create default config
 
         NewConfig.close();
         return 2;
@@ -39,7 +47,6 @@ int loadConfig(int &port,
 
         std::string key = line.substr(0, eqPos);
         std::string value = line.substr(eqPos + 1);
-
 
         if (key == "PORT") // load port, command arg overrides
         {
@@ -101,7 +108,8 @@ int loadConfig(int &port,
             int ll = std::atoi(value.c_str());
             if (ll >= 1) // at least 1 line
                 logMaxLines = ll;
-            else {
+            else
+            {
                 logMaxLines = 0; // no limit
             }
         }
