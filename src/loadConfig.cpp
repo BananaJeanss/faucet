@@ -6,7 +6,12 @@
 
 using namespace std;
 
-int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useDirListing, int &requestRateLimit)
+int loadConfig(int &port,
+               std::string &siteDir,
+               std::string &Page404,
+               bool &useDirListing,
+               int &requestRateLimit,
+               std::string &contactEmail)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -51,9 +56,12 @@ int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useD
             // lowercase key
             for (auto &c : value)
                 c = tolower(c);
-            if (value == "true") {
+            if (value == "true")
+            {
                 useDirListing = true;
-            } else {
+            }
+            else
+            {
                 useDirListing = false;
             }
         }
@@ -62,6 +70,10 @@ int loadConfig(int &port, std::string &siteDir, std::string &Page404, bool &useD
             int rl = std::atoi(value.c_str());
             if (rl >= 0) // 0 for none
                 requestRateLimit = rl;
+        }
+        else if (key == "CONTACT_EMAIL") // contact email for error pages
+        {
+            contactEmail = value;
         }
     }
     return 0;

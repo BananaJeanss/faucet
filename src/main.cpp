@@ -20,6 +20,7 @@
 #include "include/returnDirListing.h"
 #include "include/contentTypes.h"
 #include <vector>
+#include "include/returnErrorPage.h"
 
 using namespace std;
 
@@ -37,6 +38,7 @@ string siteDir = "public";
 string Page404 = ""; // relative to siteDir, empty for none
 bool useDirListing = false;
 int requestRateLimit = 10; // requests/second per IP, 0 for none
+string contactEmail = "";
 
 // ip ratelimit struct
 struct IpRateLimit
@@ -59,7 +61,7 @@ int main(int argc, char *argv[])
     printf("faucet http server\n");
 
     // load config
-    int confResult = loadConfig(port, siteDir, Page404, useDirListing, requestRateLimit);
+    int confResult = loadConfig(port, siteDir, Page404, useDirListing, requestRateLimit, contactEmail);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -206,9 +208,7 @@ int main(int argc, char *argv[])
                     if (entry.requestCount > requestRateLimit)
                     {
                         // over limit, send 429 and close
-                        const char *hdr = "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-                        send(client_fd, hdr, strlen(hdr), 0);
-                        close(client_fd);
+                        returnErrorPage(client_fd, 429, contactEmail);
                         printf("[%s] Rate limit exceeded for %s\n", timebuf, clientIp);
                         fflush(stdout);
                         found = true;
@@ -255,9 +255,7 @@ int main(int argc, char *argv[])
         // if header too large/malformed, close
         if (!strstr(buffer, eolmark))
         {
-            const char *hdr = "HTTP/1.1 400 Bad Request\r\n\r\n";
-            send(client_fd, hdr, strlen(hdr), 0);
-            close(client_fd);
+            returnErrorPage(client_fd, 400, contactEmail);
             continue;
         }
 
@@ -289,14 +287,24 @@ int main(int argc, char *argv[])
         // reject .. for simple security
         if (strstr(path_start, ".."))
         {
-            const char *hdr = "HTTP/1.1 400 Bad Request\r\n\r\n";
-            send(client_fd, hdr, strlen(hdr), 0);
-            close(client_fd);
+            returnErrorPage(client_fd, 400, contactEmail);
             continue;
         }
 
         // strip leading slash for filesystem open
         const char *rel_path = (path_start[0] == '/') ? path_start + 1 : path_start;
+
+        // return 418 for /imateapot418 if file/dir does not exist
+        if (strcmp(path_start, "/imateapot418") == 0)
+        {
+            const std::string fullPath = siteDir.empty() ? "imateapot418" : (siteDir + "/imateapot418");
+            struct stat st{};
+            if (stat(fullPath.c_str(), &st) != 0)
+            {
+                returnErrorPage(client_fd, 418, contactEmail);
+                continue;
+            }
+        }
 
         // handle explicit directory requests ending with '/'
         if (path_start[strlen(path_start) - 1] == '/')
@@ -356,11 +364,11 @@ int main(int argc, char *argv[])
                 // no index file; directory listing or 404
                 if (useDirListing)
                 {
-                    returnDirListing(client_fd, siteDir, dirRel, Page404);
+                    returnDirListing(client_fd, siteDir, dirRel, Page404, contactEmail);
                 }
                 else
                 {
-                    return404(client_fd, siteDir, Page404);
+                    return404(client_fd, siteDir, Page404, contactEmail);
                 }
                 continue;
             }
@@ -438,11 +446,11 @@ int main(int argc, char *argv[])
             if (useDirListing)
             {
                 // rel_path currently without leading slash already
-                returnDirListing(client_fd, siteDir, rel_path, Page404);
+                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail);
             }
             else
             {
-                return404(client_fd, siteDir, Page404);
+                return404(client_fd, siteDir, Page404, contactEmail);
             }
             continue;
         }
@@ -452,19 +460,19 @@ int main(int argc, char *argv[])
             // if dirlisting enabled and user did not specify file, show dir listing
             if (useDirListing && !userSetFile)
             {
-                returnDirListing(client_fd, siteDir, rel_path, Page404);
+                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail);
                 continue;
             }
             else
             {
-                return404(client_fd, siteDir, Page404);
+                return404(client_fd, siteDir, Page404, contactEmail);
                 continue;
             }
         }
         struct stat st{};
         if (fstat(opened_fd, &st) < 0 || !S_ISREG(st.st_mode))
         {
-            return404(client_fd, siteDir, Page404);
+            return404(client_fd, siteDir, Page404, contactEmail);
             close(opened_fd); // not a regular file, close
             continue;
         }

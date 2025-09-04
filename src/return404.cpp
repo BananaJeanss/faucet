@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <cstring>
 
-extern void return404(int client_fd, const std::string &siteDir, const std::string &Page404)
+#include "include/returnErrorPage.h"
+
+extern void return404(int client_fd, const std::string &siteDir, const std::string &Page404, const std::string &contactEmail)
 {
     // if custom 404 page is set, try to serve it
     if (!Page404.empty())
@@ -52,16 +54,12 @@ extern void return404(int client_fd, const std::string &siteDir, const std::stri
         {
             // could not open custom 404 page, fallback to basic 404
             perror("open");
-            const char *hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send(client_fd, hdr, strlen(hdr), 0);
-            close(client_fd);
+            returnErrorPage(client_fd, 404, contactEmail);
         }
     }
     else
     {
-        // no custom 404 page set, just return basic 404
-        const char *hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-        send(client_fd, hdr, strlen(hdr), 0);
-        close(client_fd);
+        // no custom 404 page set, return returnErrorPage
+        returnErrorPage(client_fd, 404, contactEmail); // returnErrorPage handles closing client_fd yadayada
     }
 }
