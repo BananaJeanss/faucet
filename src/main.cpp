@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <cctype>
 #include <vector>
+#include <algorithm>
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
@@ -68,6 +69,14 @@ struct IpRateLimit
 
 std::vector<IpRateLimit> ipRateLimits;
 
+struct blockedClients // blocked clients based on trust score until blockforDuration ends
+{
+    string ip;
+    time_t blockedUntil;
+};
+
+vector<blockedClients> blockedClientList;
+
 // base64 encoder for auth
 static std::string base64Encode(const std::string &in)
 {
@@ -101,6 +110,18 @@ static std::string base64Encode(const std::string &in)
         out.push_back('=');
     }
     return out;
+}
+
+static void clearBlockedClients()
+{
+    time_t now = time(nullptr);
+    blockedClientList.erase(
+        std::remove_if(blockedClientList.begin(), blockedClientList.end(),
+                       [now](const blockedClients &entry)
+                       {
+                           return entry.blockedUntil <= now;
+                       }),
+        blockedClientList.end());
 }
 
 int main(int argc, char *argv[])
@@ -363,6 +384,80 @@ int main(int argc, char *argv[])
             }
         }
 
+        // check if client is in block list
+        {
+            clearBlockedClients();
+            bool isBlocked = false;
+            for (const auto &entry : blockedClientList)
+            {
+                if (entry.ip == effectiveClientIp)
+                {
+                    isBlocked = true;
+                    break;
+                }
+            }
+            if (isBlocked)
+            {
+                returnErrorPage(client_fd, 4031, contactEmail);
+                char blockedBuffer[256];
+                string humanReadableUntil;
+                {
+                    time_t t = 0;
+                    for (const auto &entry : blockedClientList)
+                    {
+                        if (entry.ip == effectiveClientIp)
+                        {
+                            t = entry.blockedUntil;
+                            break;
+                        }
+                    }
+                    if (t != 0)
+                    {
+                        auto tm = *localtime(&t);
+                        char buf[32];
+                        strftime(buf, sizeof(buf), "%d-%m-%Y %H:%M:%S", &tm);
+                        humanReadableUntil = buf;
+                    }
+                    else
+                    {
+                        humanReadableUntil = "unknown time";
+                    }
+                }
+                snprintf(blockedBuffer, sizeof(blockedBuffer), "[%s] Blocked %s due to previous low trust score until %s", timebuf, effectiveClientIp.c_str(), humanReadableUntil.c_str());
+                string blockedOutput = blockedBuffer;
+                logRequest(blockedOutput, toggleLogging, logMaxLines);
+                close(client_fd);
+                continue;
+            }
+        }
+
+        // evaluate trust score if enabled
+        if (evaluateTrustScore)
+        {
+            // Extract headers as string
+            const char *hdrEnd = strstr(buffer, "\r\n\r\n");
+            size_t headerLen = hdrEnd ? (size_t)(hdrEnd - buffer) : (size_t)used;
+            std::string headers(buffer, headerLen);
+
+            int trustScore = evaluateTrust(effectiveClientIp, headers, trustScoreCacheDuration, checkHoneypotPaths);
+            if (trustScore <= trustScoreThreshold)
+            {
+                // block request, and add to blockedClients
+                blockedClients newEntry{};
+                newEntry.ip = effectiveClientIp;
+                newEntry.blockedUntil = time(nullptr) + blockforDuration;
+                blockedClientList.push_back(newEntry);
+
+                // 4031, 1 indicates its a trust score so returnErrorPage can show extra info
+                returnErrorPage(client_fd, 4031, contactEmail);
+                char blockedBuffer[256];
+                snprintf(blockedBuffer, sizeof(blockedBuffer), "[%s] Blocked %s due to low trust score (%d)", timebuf, effectiveClientIp.c_str(), trustScore);
+                string blockedOutput = blockedBuffer;
+                logRequest(blockedOutput, toggleLogging, logMaxLines);
+                continue;
+            }
+        }
+
         if (requestRateLimit > 0)
         {
             // check ip rate limit
@@ -404,27 +499,6 @@ int main(int argc, char *argv[])
                 newEntry.requestCount = 1;
                 newEntry.lastRequestTime = now;
                 ipRateLimits.push_back(newEntry);
-            }
-        }
-
-        // evaluate trust score if enabled
-        if (evaluateTrustScore)
-        {
-            // Extract headers as string
-            const char *hdrEnd = strstr(buffer, "\r\n\r\n");
-            size_t headerLen = hdrEnd ? (size_t)(hdrEnd - buffer) : (size_t)used;
-            std::string headers(buffer, headerLen);
-
-            int trustScore = evaluateTrust(effectiveClientIp, headers, trustScoreCacheDuration, checkHoneypotPaths);
-            if (trustScore <= trustScoreThreshold)
-            {
-                // block request
-                returnErrorPage(client_fd, 403, contactEmail);
-                char blockedBuffer[256];
-                snprintf(blockedBuffer, sizeof(blockedBuffer), "[%s] Blocked %s due to low trust score (%d)", timebuf, effectiveClientIp.c_str(), trustScore);
-                string blockedOutput = blockedBuffer;
-                logRequest(blockedOutput, toggleLogging, logMaxLines);
-                continue;
             }
         }
 
