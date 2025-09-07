@@ -10,4 +10,9 @@ int loadConfig(int &port,
                std::string &authCredentials,
                bool &toggleLogging,
                int &logMaxLines,
-               bool &trustXRealIp);
+               bool &trustXRealIp,
+               bool &evaluateTrustScore,
+               int &trustScoreThreshold,
+               int &trustScoreCacheDuration,
+               bool &checkHoneypotPaths,
+               int &blockforDuration);

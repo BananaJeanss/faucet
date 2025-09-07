@@ -1,4 +1,5 @@
 #include "include/logRequest.h"
+#include "include/evaluateTrust.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -11,6 +12,8 @@ void logRequest(const string &consoleOutput,
                 bool toggleLogging,
                 int logMaxLines)
 {
+    // append ip trust score to end 
+
     // log to console
     cout << consoleOutput << endl;
 

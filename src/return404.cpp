@@ -5,12 +5,19 @@
 #include <sys/sendfile.h>
 #include <unistd.h>
 #include <cstring>
+#include "include/perMinute404.h"
 
 #include "include/returnErrorPage.h"
 
-extern void return404(int client_fd, const std::string &siteDir, const std::string &Page404, const std::string &contactEmail)
+extern void return404(int client_fd, 
+    const std::string 
+    &siteDir, 
+    const std::string &Page404, 
+    const std::string &contactEmail,
+    const std::string &ip)
 {
     // if custom 404 page is set, try to serve it
+    add404PMentry(ip);
     if (!Page404.empty())
     {
         std::string fullPath = siteDir.empty() ? Page404 : (siteDir + "/" + Page404);

@@ -15,7 +15,12 @@ int loadConfig(int &port,
                std::string &authCredentials,
                bool &toggleLogging,
                int &logMaxLines,
-               bool &trustXRealIp)
+               bool &trustXRealIp,
+               bool &evaluateTrustScore,
+               int &trustScoreThreshold,
+               int &trustScoreCacheDuration,
+               bool &checkHoneypotPaths,
+               int &blockforDuration)
 {
     std::ifstream envFile(".env");
     if (!envFile.is_open())
@@ -31,7 +36,12 @@ int loadConfig(int &port,
                      "AUTH_CREDENTIALS=\n"
                      "TOGGLE_LOGGING=false\n"
                      "LOG_MAX_LINES=5000\n"
-                     "TRUST_XREALIP=false\n";
+                     "TRUST_XREALIP=false\n"
+                     "EVALUATE_TRUSTSCORE=false\n"
+                     "TRUSTSCORE_THRESHOLD=90\n"
+                     "TRUSTSCORE_CACHEDURATION=3600\n"
+                     "CHECK_HONEYPOT_PATHS=false\n"
+                     "BLOCKFOR_DURATION=600\n";
 
         NewConfig.close();
         return 2;
@@ -131,6 +141,52 @@ int loadConfig(int &port,
             {
                 trustXRealIp = false;
             }
+        }
+        // trust score stuff
+        else if (key == "EVALUATE_TRUSTSCORE") // enable trust score evaluation
+        {
+            for (auto &c : value)
+                c = tolower(c);
+            if (value == "true")
+            {
+                evaluateTrustScore = true;
+            }
+            else
+            {
+                evaluateTrustScore = false;
+            }
+        }
+        else if (key == "TRUSTSCORE_THRESHOLD") // trust score threshold for blocking
+        {
+            int tst = std::atoi(value.c_str());
+            if (tst >= 0 && tst <= 100) // valid range
+                trustScoreThreshold = tst;
+            else trustScoreThreshold = 90; // default 90
+        }
+        else if (key == "TRUSTSCORE_CACHEDURATION") // trust score cache duration in seconds
+        {
+            int tscd = std::atoi(value.c_str());
+            if (tscd >= 0) // 0 for no caching
+                trustScoreCacheDuration = tscd;
+        }
+        else if (key == "CHECK_HONEYPOT_PATHS") // check for honeypot paths such as /admin, /wp-login.php, /xmlrpc.php, etc.
+        {
+            for (auto &c : value)
+                c = tolower(c);
+            if (value == "true")
+            {
+                checkHoneypotPaths = true;
+            }
+            else
+            {
+                checkHoneypotPaths = false;
+            }
+        }
+        else if (key == "BLOCKFOR_DURATION") // duration in seconds to block an IP for if it goes below the trust score threshold
+        {
+            int bfd = std::atoi(value.c_str());
+            if (bfd >= 0) // 0 for no blocking
+                blockforDuration = bfd;
         }
     }
     return 0;

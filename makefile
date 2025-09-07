@@ -1,6 +1,14 @@
 CXX := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -Iinclude
-SRC := src/main.cpp src/loadConfig.cpp src/return404.cpp src/returnDirListing.cpp src/returnErrorPage.cpp src/logRequest.cpp src/headerManager.cpp
+SRC := src/main.cpp \
+	src/loadConfig.cpp \
+	src/return404.cpp \
+	src/returnDirListing.cpp \
+	src/returnErrorPage.cpp \
+	src/logRequest.cpp \
+	src/headerManager.cpp \
+	src/evaluateTrust.cpp \
+	src/perMinute404.cpp
 OBJ := $(SRC:.cpp=.o)
 BIN := faucet
 

@@ -24,14 +24,15 @@ void returnDirListing(int client_fd,
                       const std::string &siteDir,
                       const std::string &relPath,
                       const std::string &Page404,
-                      const std::string &contactEmail)
+                      const std::string &contactEmail,
+                      const std::string &ip)
 {
     std::string fullPath = siteDir.empty() ? relPath : (siteDir + "/" + relPath);
 
     DIR *dir = opendir(fullPath.c_str());
     if (!dir)
     {
-        return404(client_fd, siteDir, Page404, contactEmail);
+        return404(client_fd, siteDir, Page404, contactEmail, ip);
         return;
     }
 
@@ -135,7 +136,7 @@ void returnDirListing(int client_fd,
                           body.size());
     if (hdrLen <= 0 || hdrLen >= (int)sizeof(hdr))
     {
-        return404(client_fd, siteDir, Page404, contactEmail);
+        return404(client_fd, siteDir, Page404, contactEmail, ip);
         return;
     }
     send(client_fd, hdr, hdrLen, 0);

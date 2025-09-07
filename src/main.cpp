@@ -24,6 +24,8 @@
 #include "include/returnErrorPage.h"
 #include "include/logRequest.h"
 #include "include/headerManager.h"
+#include "include/evaluateTrust.h"
+#include "include/perMinute404.h"
 
 using namespace std;
 
@@ -35,16 +37,21 @@ static void sig_handler(int)
 }
 
 // config values
-int port = 8080;             // port to listen on
-string siteDir = "public";   // site root directory, relative to executable
-string Page404 = "";         // relative to siteDir, empty for none
-bool useDirListing = false;  // enables directory listing
-int requestRateLimit = 10;   // requests/second per IP, 0 for none
-string contactEmail = "";    // contact email for returnErrorPage
-string authCredentials = ""; // user:password for basic auth, empty for none
-bool toggleLogging = true;   // log requests to .log file
-int logMaxLines = 5000;      // max lines in log file before rotating
-bool trustXRealIp = false;   // trust X-Real-IP header from reverse proxy
+int port = 8080;                    // port to listen on
+string siteDir = "public";          // site root directory, relative to executable
+string Page404 = "";                // relative to siteDir, empty for none
+bool useDirListing = false;         // enables directory listing
+int requestRateLimit = 10;          // requests/second per IP, 0 for none
+string contactEmail = "";           // contact email for returnErrorPage
+string authCredentials = "";        // user:password for basic auth, empty for none
+bool toggleLogging = true;          // log requests to .log file
+int logMaxLines = 5000;             // max lines in log file before rotating
+bool trustXRealIp = false;          // trust X-Real-IP header from reverse proxy
+bool evaluateTrustScore = false;    // evaluate trust score on each request
+int trustScoreThreshold = 90;       // block requests with trust score above this
+int trustScoreCacheDuration = 3600; // cache duration in seconds
+bool checkHoneypotPaths = false;    // check for honeypot paths such as /admin, /wp-login.php, etc.
+int blockforDuration = 600;         // duration in seconds to block an IP for if it goes below the trust score threshold
 
 string authUser = "";
 string authPass = "";
@@ -124,7 +131,12 @@ int main(int argc, char *argv[])
                                 authCredentials,
                                 toggleLogging,
                                 logMaxLines,
-                                trustXRealIp);
+                                trustXRealIp,
+                                evaluateTrustScore,
+                                trustScoreThreshold,
+                                trustScoreCacheDuration,
+                                checkHoneypotPaths,
+                                blockforDuration);
     if (confResult == 1)
     {
         printf("Failed to load config, check the .env file.\n");
@@ -222,11 +234,12 @@ int main(int argc, char *argv[])
 
     char ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
-    printf("Listening on %s:%d, serving from %s. %s\n",
+    printf("Listening on %s:%d, serving from %s. %s %s\n",
            ip,
            ntohs(addr.sin_port),
            siteDir.c_str(),
-           authEnabled ? ("Authentication enabled (user: " + authUser + ")").c_str() : "");
+           authEnabled ? ("Authentication enabled (user: " + authUser + ")").c_str() : "",
+           evaluateTrustScore ? "Trust score evaluation enabled." : "");
     fflush(stdout);
 
     // listen
@@ -391,6 +404,27 @@ int main(int argc, char *argv[])
                 newEntry.requestCount = 1;
                 newEntry.lastRequestTime = now;
                 ipRateLimits.push_back(newEntry);
+            }
+        }
+
+        // evaluate trust score if enabled
+        if (evaluateTrustScore)
+        {
+            // Extract headers as string
+            const char *hdrEnd = strstr(buffer, "\r\n\r\n");
+            size_t headerLen = hdrEnd ? (size_t)(hdrEnd - buffer) : (size_t)used;
+            std::string headers(buffer, headerLen);
+
+            int trustScore = evaluateTrust(effectiveClientIp, headers, trustScoreCacheDuration, checkHoneypotPaths);
+            if (trustScore <= trustScoreThreshold)
+            {
+                // block request
+                returnErrorPage(client_fd, 403, contactEmail);
+                char blockedBuffer[256];
+                snprintf(blockedBuffer, sizeof(blockedBuffer), "[%s] Blocked %s due to low trust score (%d)", timebuf, effectiveClientIp.c_str(), trustScore);
+                string blockedOutput = blockedBuffer;
+                logRequest(blockedOutput, toggleLogging, logMaxLines);
+                continue;
             }
         }
 
@@ -663,11 +697,11 @@ int main(int argc, char *argv[])
                 // no index file; directory listing or 404
                 if (useDirListing)
                 {
-                    returnDirListing(client_fd, siteDir, dirRel, Page404, contactEmail);
+                    returnDirListing(client_fd, siteDir, dirRel, Page404, contactEmail, effectiveClientIp);
                 }
                 else
                 {
-                    return404(client_fd, siteDir, Page404, contactEmail);
+                    return404(client_fd, siteDir, Page404, contactEmail, effectiveClientIp);
                 }
                 continue;
             }
@@ -789,11 +823,11 @@ int main(int argc, char *argv[])
             if (useDirListing)
             {
                 // rel_path currently without leading slash already
-                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail);
+                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail, effectiveClientIp);
             }
             else
             {
-                return404(client_fd, siteDir, Page404, contactEmail);
+                return404(client_fd, siteDir, Page404, contactEmail, effectiveClientIp);
             }
             continue;
         }
@@ -803,19 +837,19 @@ int main(int argc, char *argv[])
             // if dirlisting enabled and user did not specify file, show dir listing
             if (useDirListing && !userSetFile)
             {
-                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail);
+                returnDirListing(client_fd, siteDir, rel_path, Page404, contactEmail, effectiveClientIp);
                 continue;
             }
             else
             {
-                return404(client_fd, siteDir, Page404, contactEmail);
+                return404(client_fd, siteDir, Page404, contactEmail, effectiveClientIp);
                 continue;
             }
         }
         struct stat st{};
         if (fstat(opened_fd, &st) < 0 || !S_ISREG(st.st_mode))
         {
-            return404(client_fd, siteDir, Page404, contactEmail);
+            return404(client_fd, siteDir, Page404, contactEmail, effectiveClientIp);
             close(opened_fd); // not a regular file, close
             continue;
         }
