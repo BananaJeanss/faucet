@@ -50,7 +50,6 @@ int logMaxLines = 5000;             // max lines in log file before rotating
 bool trustXRealIp = false;          // trust X-Real-IP header from reverse proxy
 bool evaluateTrustScore = false;    // evaluate trust score on each request
 int trustScoreThreshold = 90;       // block requests with trust score above this
-int trustScoreCacheDuration = 3600; // cache duration in seconds
 bool checkHoneypotPaths = false;    // check for honeypot paths such as /admin, /wp-login.php, etc.
 int blockforDuration = 600;         // duration in seconds to block an IP for if it goes below the trust score threshold
 
@@ -155,7 +154,6 @@ int main(int argc, char *argv[])
                                 trustXRealIp,
                                 evaluateTrustScore,
                                 trustScoreThreshold,
-                                trustScoreCacheDuration,
                                 checkHoneypotPaths,
                                 blockforDuration);
     if (confResult == 1)
@@ -167,6 +165,12 @@ int main(int argc, char *argv[])
     {
         printf("No config found, created default .env file.\n");
         printf("Continuing with defaults...\n");
+    }
+
+    // initialize honeypot paths if enabled
+    if (checkHoneypotPaths)
+    {
+        initializeHoneypotPaths();
     }
 
     // convert authCredentials to authuser/authpass
@@ -439,7 +443,7 @@ int main(int argc, char *argv[])
             size_t headerLen = hdrEnd ? (size_t)(hdrEnd - buffer) : (size_t)used;
             std::string headers(buffer, headerLen);
 
-            int trustScore = evaluateTrust(effectiveClientIp, headers, trustScoreCacheDuration, checkHoneypotPaths);
+            int trustScore = evaluateTrust(effectiveClientIp, headers, checkHoneypotPaths);
             if (trustScore <= trustScoreThreshold)
             {
                 // block request, and add to blockedClients

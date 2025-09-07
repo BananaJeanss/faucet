@@ -1,0 +1,7 @@
+/admin
+/wp-login.php
+/xmlrpc.php
+/administrator
+/config.php
+/setup.php
+/install.php

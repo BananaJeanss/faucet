@@ -4,16 +4,8 @@
 #include <ctime>
 #include <algorithm>
 #include <cstdio>
-
-struct TrustScoreCacheEntry
-{
-    string ip;
-    int trustScore;
-    time_t timestamp;
-    string userAgent; // if useragent differs, re-eval
-};
-
-static vector<TrustScoreCacheEntry> trustScoreCache;
+#include <cstring>
+#include <cctype>
 
 struct requestPerMinute // storing this here for now cause nothing else outside would need to know requests per minute
 {
@@ -24,36 +16,65 @@ struct requestPerMinute // storing this here for now cause nothing else outside 
 
 static vector<requestPerMinute> requestsPerMinute;
 
-static int clearCache(int &trustScoreCacheDuration)
+const vector<string> defaultHoneypotPaths = {
+    "/admin",
+    "/wp-login.php",
+    "/xmlrpc.php",
+    "/administrator",
+    "/config.php",
+    "/setup.php",
+    "/install.php",
+};
+
+vector<string> honeypotPaths = defaultHoneypotPaths;
+
+void initializeHoneypotPaths()
 {
-    time_t now = time(nullptr);
-    try
+    // if honeypotPaths.txt exists in same dir as exe, load paths from there per line
+    FILE *file = fopen("honeypotPaths.txt", "r");
+    if (file)
     {
-        trustScoreCache.erase(
-            std::remove_if(trustScoreCache.begin(), trustScoreCache.end(),
-                           [now, &trustScoreCacheDuration](const TrustScoreCacheEntry &entry)
-                           {
-                               return (now - entry.timestamp) > trustScoreCacheDuration;
-                           }),
-            trustScoreCache.end());
+        // clear honeypotPaths cause the defaults are already in there
+        honeypotPaths.clear();
+
+        // read lines
+        char line[4096];
+        while (fgets(line, sizeof(line), file))
+        {
+            // Remove trailing newline and carriage return and surrounding spaces/tabs
+            size_t len = strlen(line);
+            while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' || line[len - 1] == ' ' || line[len - 1] == '\t'))
+            {
+                line[len - 1] = '\0';
+                --len;
+            }
+            size_t start = 0;
+            while (line[start] == ' ' || line[start] == '\t')
+                ++start;
+            if (len > start)
+            {
+                std::string cleaned = std::string(line + start, len - start);
+                if (!cleaned.empty() && cleaned[0] != '/')
+                {
+                    // ensure paths start with '/'
+                    cleaned = "/" + cleaned;
+                }
+                honeypotPaths.push_back(cleaned);
+            }
+        }
+        fclose(file);
+        printf("Loaded %zu honeypot paths from honeypotPaths.txt\n", honeypotPaths.size());
+        // Optional debug list (can be removed later)
+        for (const auto &p : honeypotPaths)
+        {
+            // show any hidden characters length mismatch
+            printf("  honeypot: '%s' (len=%zu)\n", p.c_str(), p.size());
+        }
     }
-    catch (...)
-    {
-        // if errors, log error, and if cache is reasonably big, clear it all
-        // ngl idk if it even can error but try catch block ftw
-        if (trustScoreCache.size() > 1000)
-            trustScoreCache.clear();
-        printf("Error in trust score cache cleanup\n");
-        return 1; // error
-    }
-    return 0;
 }
 
-int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheDuration, bool &checkHoneypotPaths)
+int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPaths)
 {
-    // clear cache of old entries
-    clearCache(trustScoreCacheDuration);
-
     // store request in requestsPerMinute
     time_t now = time(nullptr);
     requestsPerMinute.push_back({ip, 1, now});
@@ -76,31 +97,6 @@ int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheD
         userAgent = headers.substr(userAgentStart + 12, userAgentEnd - userAgentStart - 12);
     }
 
-    // check cache first
-    for (const auto &entry : trustScoreCache)
-    {
-        if (entry.ip == ip && entry.userAgent == userAgent)
-        {
-            // cached, but also check for 404s per minute cause if we cache on the first request, how tf we know if they did 404s after that
-            int PM404Count = get404PMcount(ip);
-            int cachedScore = entry.trustScore;
-            if (PM404Count > 20) {
-                cachedScore -= 40; // lots of 404s recently, lower trust
-            }
-            else if (PM404Count > 15) {
-                cachedScore -= 25; // many 404s recently, lower trust
-            } else if (PM404Count > 10) {
-                cachedScore -= 15; // some 404s recently, lower trust a bit
-            }
-            else if (PM404Count > 5) {
-                cachedScore -= 5; // few 404s recently, lower trust a bit
-            }
-            printf("Using cached trust score for %s: %d (404s in last minute: %d)\n", ip.c_str(), cachedScore, PM404Count);
-            return cachedScore;
-        }
-    }
-
-    // not in cache, evaluate trust score
     int score = 30; // Trust score, higher is more trusted. Start at a reasonable trust level
 
     // wont check for 404s here cause this is the first eval
@@ -188,26 +184,69 @@ int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheD
         score += 35; // localhost, very high trust
     }
 
-    // check if trying to access honeypot paths
-    const vector<string> honeypotPaths = {
-        "/admin",
-        "/wp-login.php",
-        "/xmlrpc.php",
-        "/administrator",
-        "/config.php",
-        "/setup.php",
-        "/install.php",
-    };
-    if (checkHoneypotPaths)
+    // Extract request line to get exact path (first line up to CRLF)
+    string requestLine;
+    {
+        size_t lineEnd = headers.find("\r\n");
+        if (lineEnd != string::npos)
+            requestLine = headers.substr(0, lineEnd);
+        else
+            requestLine = headers; // fallback if malformed
+    }
+    string method, reqPath;
+    {
+        // simple split by spaces
+        size_t firstSpace = requestLine.find(' ');
+        if (firstSpace != string::npos)
+        {
+            method = requestLine.substr(0, firstSpace);
+            size_t secondSpace = requestLine.find(' ', firstSpace + 1);
+            if (secondSpace != string::npos)
+            {
+                reqPath = requestLine.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+            }
+        }
+    }
+    // normalize reqPath: remove trailing slashes except root
+    if (reqPath.size() > 1)
+    {
+        while (!reqPath.empty() && reqPath.size() > 1 && reqPath.back() == '/')
+            reqPath.pop_back();
+    }
+
+    if (checkHoneypotPaths && !reqPath.empty())
     {
         for (const auto &path : honeypotPaths)
         {
-            if (headers.find("GET " + path) != string::npos || headers.find("POST " + path) != string::npos)
+            // also normalize the honeypot path similarly (assume stored normalized)
+            string hp = path;
+            if (hp.size() > 1)
+            {
+                while (hp.size() > 1 && hp.back() == '/')
+                    hp.pop_back();
+            }
+            if (reqPath == hp)
             {
                 score -= 35; // accessing honeypot path, lower trust significantly
+                printf("Tried to access honeypot path %s from %s, lowering trust score\n", hp.c_str(), ip.c_str());
                 break;
             }
         }
+    }
+
+    // check 404s per minute from this IP
+    int f404 = get404PMcount(ip);
+    if (f404 > 20)
+    {
+        score -= 35; // very high 404 rate, lower trust significantly
+    }
+    else if (f404 > 10)
+    {
+        score -= 20; // high 404 rate, lower trust
+    }
+    else if (f404 > 5)
+    {
+        score -= 10; // moderate 404 rate, lower trust a bit
     }
 
     // clamp score to 0-100
@@ -215,9 +254,6 @@ int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheD
         score = 0;
     if (score > 100)
         score = 100;
-
-    // store in cache
-    trustScoreCache.push_back({ip, score, now, userAgent});
 
     printf("Evaluated trust score for %s: %d\n", ip.c_str(), score);
     return score;

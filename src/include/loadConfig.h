@@ -13,6 +13,5 @@ int loadConfig(int &port,
                bool &trustXRealIp,
                bool &evaluateTrustScore,
                int &trustScoreThreshold,
-               int &trustScoreCacheDuration,
                bool &checkHoneypotPaths,
                int &blockforDuration);

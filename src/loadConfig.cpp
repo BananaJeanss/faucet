@@ -18,7 +18,6 @@ int loadConfig(int &port,
                bool &trustXRealIp,
                bool &evaluateTrustScore,
                int &trustScoreThreshold,
-               int &trustScoreCacheDuration,
                bool &checkHoneypotPaths,
                int &blockforDuration)
 {
@@ -39,7 +38,6 @@ int loadConfig(int &port,
                      "TRUST_XREALIP=false\n"
                      "EVALUATE_TRUSTSCORE=false\n"
                      "TRUSTSCORE_THRESHOLD=90\n"
-                     "TRUSTSCORE_CACHEDURATION=3600\n"
                      "CHECK_HONEYPOT_PATHS=false\n"
                      "BLOCKFOR_DURATION=600\n";
 
@@ -162,12 +160,6 @@ int loadConfig(int &port,
             if (tst >= 0 && tst <= 100) // valid range
                 trustScoreThreshold = tst;
             else trustScoreThreshold = 90; // default 90
-        }
-        else if (key == "TRUSTSCORE_CACHEDURATION") // trust score cache duration in seconds
-        {
-            int tscd = std::atoi(value.c_str());
-            if (tscd >= 0) // 0 for no caching
-                trustScoreCacheDuration = tscd;
         }
         else if (key == "CHECK_HONEYPOT_PATHS") // check for honeypot paths such as /admin, /wp-login.php, /xmlrpc.php, etc.
         {
