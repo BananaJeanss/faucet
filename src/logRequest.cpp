@@ -12,8 +12,6 @@ void logRequest(const string &consoleOutput,
                 bool toggleLogging,
                 int logMaxLines)
 {
-    // append ip trust score to end 
-
     // log to console
     cout << consoleOutput << endl;
 

@@ -95,12 +95,13 @@ int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheD
             else if (PM404Count > 5) {
                 cachedScore -= 5; // few 404s recently, lower trust a bit
             }
+            printf("Using cached trust score for %s: %d (404s in last minute: %d)\n", ip.c_str(), cachedScore, PM404Count);
             return cachedScore;
         }
     }
 
     // not in cache, evaluate trust score
-    int score = 50; // Trust score, higher is more trusted. Start at a reasonable trust level
+    int score = 30; // Trust score, higher is more trusted. Start at a reasonable trust level
 
     // wont check for 404s here cause this is the first eval
 
@@ -215,5 +216,9 @@ int evaluateTrust(const string &ip, const string &headers, int &trustScoreCacheD
     if (score > 100)
         score = 100;
 
+    // store in cache
+    trustScoreCache.push_back({ip, score, now, userAgent});
+
+    printf("Evaluated trust score for %s: %d\n", ip.c_str(), score);
     return score;
 }
