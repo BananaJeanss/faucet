@@ -28,6 +28,40 @@ const vector<string> defaultHoneypotPaths = {
 
 vector<string> honeypotPaths = defaultHoneypotPaths;
 
+struct lowestScorePerMinute { // keeps track of the lowest score per IP per minute
+    string ip;
+    int score;
+    time_t timestamp;
+};
+
+static vector<lowestScorePerMinute> lowestScores;
+
+static void clearLowestScores() // clears entries older than 1 minute
+{
+    time_t now = time(nullptr);
+    lowestScores.erase(
+        std::remove_if(lowestScores.begin(), lowestScores.end(),
+                       [now](const lowestScorePerMinute &entry)
+                       {
+                           return (now - entry.timestamp) > 60;
+                       }),
+        lowestScores.end());
+}
+
+static int checkLowestScore(const string &ip)
+{
+    auto it = std::find_if(lowestScores.begin(), lowestScores.end(),
+                           [&ip](const lowestScorePerMinute &entry)
+                           {
+                               return entry.ip == ip;
+                           });
+    if (it != lowestScores.end())
+    {
+        return it->score;
+    }
+    return -1; // not found
+}
+
 void initializeHoneypotPaths()
 {
     // if honeypotPaths.txt exists in same dir as exe, load paths from there per line
@@ -64,12 +98,6 @@ void initializeHoneypotPaths()
         }
         fclose(file);
         printf("Loaded %zu honeypot paths from honeypotPaths.txt\n", honeypotPaths.size());
-        // Optional debug list (can be removed later)
-        for (const auto &p : honeypotPaths)
-        {
-            // show any hidden characters length mismatch
-            printf("  honeypot: '%s' (len=%zu)\n", p.c_str(), p.size());
-        }
     }
 }
 
@@ -255,6 +283,32 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
     if (score > 100)
         score = 100;
 
-    printf("Evaluated trust score for %s: %d\n", ip.c_str(), score);
-    return score;
+    // check if score is lower than previous lowest in last minute
+    clearLowestScores();
+    int prevLowest = checkLowestScore(ip);
+    int finalScore = score;
+        if (prevLowest == -1) {
+            // first entry for this IP in current window
+            lowestScores.push_back({ip, score, now});
+        } else if (score < prevLowest) {
+            // new lower score replaces stored
+            for (auto &entry : lowestScores) {
+                if (entry.ip == ip) {
+                    entry.score = score;
+                    entry.timestamp = now;
+                    break;
+                }
+            }
+        } else {
+            // use previous lowest score
+            finalScore = prevLowest;
+        }
+
+        if (finalScore != score) {
+            printf("Evaluated trust score for %s: %d (using previous lowest, raw: %d)\n", ip.c_str(), finalScore, score);
+        } else {
+            printf("Evaluated trust score for %s: %d\n", ip.c_str(), finalScore);
+        }
+
+    return finalScore;
 }
