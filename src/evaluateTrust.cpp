@@ -145,19 +145,24 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
     const vector<string> trustedAgents = {
         "Mozilla", "Chrome", "Safari", "Edge", "Firefox", "Opera", "AppleWebKit", "Gecko"};
 
+    bool agentFoundAlready = false; // prevents double counting
     for (const auto &agent : suspiciousAgents)
     {
+        if (agentFoundAlready) break; 
         if (userAgent.find(agent) != string::npos)
         {
             score -= 10; // suspicious user agent, lower trust
+            agentFoundAlready = true;
         }
     }
 
     for (const auto &agent : trustedAgents)
     {
+        if (agentFoundAlready) break;
         if (userAgent.find(agent) != string::npos)
         {
             score += 10; // trusted user agent, raise trust
+            agentFoundAlready = true;
         }
     }
 
@@ -258,7 +263,6 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
             if (reqPath == hp)
             {
                 score -= 35; // accessing honeypot path, lower trust significantly
-                printf("Tried to access honeypot path %s from %s, lowering trust score\n", hp.c_str(), ip.c_str());
                 break;
             }
         }
