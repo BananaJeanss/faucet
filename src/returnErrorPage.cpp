@@ -31,7 +31,7 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
         break;
     case 4031: // low trust score
         errorText = "Forbidden<br>Your activity has been flagged as suspicious."
-                    "<br>If you believe this is an error, try again later, and contact the site administrator.";
+                    "<br>If you believe this is an error, try again later, and contact the site administrator";
         errorType = 403; // send as normal 403
         break;
     case 404:
