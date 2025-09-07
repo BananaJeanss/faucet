@@ -98,6 +98,8 @@ void initializeHoneypotPaths()
         }
         fclose(file);
         printf("Loaded %zu honeypot paths from honeypotPaths.txt\n", honeypotPaths.size());
+    } else {
+        printf("honeypotPaths.txt not found, using default honeypot paths\n");
     }
 }
 
