@@ -36,6 +36,14 @@ struct lowestScorePerMinute { // keeps track of the lowest score per IP per minu
 
 static vector<lowestScorePerMinute> lowestScores;
 
+struct honeypotsPer3Minutes {
+    string ip;
+    int count;
+    time_t timestamp;
+};
+
+static vector<honeypotsPer3Minutes> honeypots;
+
 static void clearLowestScores() // clears entries older than 1 minute
 {
     time_t now = time(nullptr);
@@ -60,6 +68,51 @@ static int checkLowestScore(const string &ip)
         return it->score;
     }
     return -1; // not found
+}
+
+static void clearHoneypotCounts() // clears entries older than 3 minutes
+{
+    time_t now = time(nullptr);
+    honeypots.erase(
+        std::remove_if(honeypots.begin(), honeypots.end(),
+                       [now](const honeypotsPer3Minutes &entry)
+                       {
+                           return (now - entry.timestamp) > 180;
+                       }),
+        honeypots.end());
+}
+
+static int getHoneypotPMcount(const string &ip)
+{
+    clearHoneypotCounts();
+    int count = 0;
+    for (const auto &entry : honeypots)
+    {
+        if (entry.ip == ip)
+        {
+            count += entry.count;
+        }
+    }
+    return count;
+}
+
+static void addHoneypotHit(const string &ip)
+{
+    time_t now = time(nullptr);
+    auto it = std::find_if(honeypots.begin(), honeypots.end(),
+                           [&ip](const honeypotsPer3Minutes &entry)
+                           {
+                               return entry.ip == ip;
+                           });
+    if (it != honeypots.end())
+    {
+        it->count++;
+        it->timestamp = now; // update timestamp to extend the window
+    }
+    else
+    {
+        honeypots.push_back({ip, 1, now});
+    }
 }
 
 void initializeHoneypotPaths()
@@ -128,8 +181,6 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
     }
 
     int score = 30; // Trust score, higher is more trusted. Start at a reasonable trust level
-
-    // wont check for 404s here cause this is the first eval
 
     // user agent stuff
     if (userAgent.empty())
@@ -200,21 +251,18 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
         }
     }
 
-    if (rpm > 125)
+    // requests per minute checks
+    if (rpm > 60)
     {
         score -= 20; // very high request rate, lower trust
     }
-    else if (rpm > 75)
+    else if (rpm > 45)
     {
         score -= 10; // high request rate, lower trust
     }
-    else if (rpm > 35)
+    else if (rpm > 25)
     {
         score -= 5; // moderate request rate, lower trust a bit
-    }
-    else if (rpm < 10)
-    {
-        score += 5; // low request rate, raise trust a bit
     }
 
     // ip range checks (basic)
@@ -271,8 +319,31 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
             if (reqPath == hp)
             {
                 score -= 35; // accessing honeypot path, lower trust significantly
+                addHoneypotHit(ip);
                 break;
             }
+        }
+    }
+
+    // honeypots per 3 minutes check
+    if (checkHoneypotPaths)
+    {
+        int hpCount = getHoneypotPMcount(ip);
+        if (hpCount >= 7)
+        {
+            score -= 65; // very high honeypot access rate, lower trust heavily (maybe block outright instead but idk)
+        }
+        else if (hpCount >= 6)
+        {
+            score -= 40; // high honeypot access rate, lower trust
+        }
+        else if (hpCount >= 4)
+        {
+            score -= 25; // moderate honeypot access rate, lower trust
+        }
+        else if (hpCount >= 2)
+        {
+            score -= 10; // low honeypot access rate, could just be a mistake, lower trust a bit
         }
     }
 
