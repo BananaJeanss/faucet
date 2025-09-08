@@ -146,12 +146,14 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
         "Mozilla", "Chrome", "Safari", "Edge", "Firefox", "Opera", "AppleWebKit", "Gecko"};
 
     bool agentFoundAlready = false; // prevents double counting
+    bool isUnknownAgent = true;
     for (const auto &agent : suspiciousAgents)
     {
         if (agentFoundAlready) break; 
         if (userAgent.find(agent) != string::npos)
         {
             score -= 10; // suspicious user agent, lower trust
+            isUnknownAgent = false;
             agentFoundAlready = true;
         }
     }
@@ -162,8 +164,14 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
         if (userAgent.find(agent) != string::npos)
         {
             score += 10; // trusted user agent, raise trust
+            isUnknownAgent = false;
             agentFoundAlready = true;
         }
+    }
+
+    if (isUnknownAgent)
+    {
+        score -= 10; // unknown user agent
     }
 
     // check for sec-ch-ua-platform
