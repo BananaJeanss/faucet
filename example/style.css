@@ -1,9 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Righteous&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&display=swap');
+
+:root {
+    --primary-color: #0088ff;
+}
 
 html {
-    background-color: #121212;
+    background-color: #161616;
     color: white;
-    font-family: 'Righteous', cursive;
+    font-family: 'Quicksand', sans-serif;
     font-weight: 400;
     display: flex;
     flex-direction: column;
@@ -19,7 +23,7 @@ body {
 }
 
 h1 {
-    color: #bb86fc;
+    color: var(--primary-color);
     margin: 0;
     font-size: 5em;
 }
@@ -39,28 +43,56 @@ ul {
     padding: 0;
     margin: 0;
 }
+
 ul li {
     margin: 5px 0;
 }
 
 a {
-    color: #03dac6;
-    text-decoration: dashed underline;
+    color: #6db3f2;
+    text-decoration: none;
+    transition: color 0.3s, text-decoration 0.3s;
+}
+
+a:hover {
+    color: #007ce9;
+    text-decoration: underline;
 }
 
 hr {
     width: 100%;
     height: 2px;
     border: none;
-    color: #bb86fc;
-    background-color: #bb86fc;
+    color: var(--primary-color);
+    background-color: var(--primary-color);
 }
-
-
 
 section {
     margin: 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+section p {
+    text-align: center;
+}
+
+section a {
+    font-size: 1.1em;
+}
+
+section h2 {
+    margin-bottom: 0;
+    font-size: 2em;
+}
+
+section hr {
+    margin: 20px 0;
+    width: 50%;
+    background-color: #003a6d;
+}
+
+section ul {
+    list-style-type: disc;
 }

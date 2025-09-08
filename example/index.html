@@ -3,22 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>faucet example page</title>
+    <title>faucet - example page</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <hero>
       <h1>faucet</h1>
-      <p>A simple HTTP server</p>
+      <p>A simple and lightweight HTTP server, written in C++.</p>
       <ul>
         <li>
           <a href="https://github.com/BananaJeanss/faucet">GitHub Repo</a>
+          |
+          <a href="https://github.com/BananaJeanss/faucet/releases">
+            Latest Releases
+          </a>
+          |
+          <a href="https://faucet.bnajns.hackclub.app">Hosted Demo</a>
         </li>
       </ul>
     </hero>
     <hr />
     <section>
       <h2>About</h2>
+      <hr />
       <p>
         If you're reading this, you're either viewing the public example page,
         or have setup faucet correctly. <br /><br />
@@ -31,31 +38,41 @@
         <li>Logging requests</li>
         <li>Ratelimiting</li>
         <li>Custom 404 page</li>
+        <li>X-Real-Ip and X-Forwarded-For support</li>
+        <li>Trust score system</li>
+        <li>Beautifully styled error pages/dir listing</li>
         <li>Many .env options</li>
         <li>And more?</li>
       </ul>
     </section>
     <section>
       <h2>Directory Listing</h2>
+      <hr />
       <p>
-        A totally never seen before feature! Click the link below to see some
-        example files/folders.
+        faucet has built-in directory listing support, with beautiful styling.
+        <br />
+        Click the link below to see it in action.
       </p>
       <a href="/files">Go to /files</a>
     </section>
     <section>
       <h2>404 custom page</h2>
+      <hr />
       <p>
-        Custom 404 page support? Unheard of! Click the link below to see it in
-        action.
+        Custom 404 page support? No way...<br />
+        faucet allows you to specify your own 404 page in the .env file, instead
+        of the default error page.<br />
+        Click the link below to see it in action.
       </p>
       <a href="/mjisbetterthanlebron">Go to a non-existent page</a>
     </section>
     <section>
       <h2>Ratelimits</h2>
+      <hr />
       <p>
-        Hold your horses! Faucet has a .env option for requests per second
-        ratelimiting.
+        Hold your horses!<br />
+        Faucet has a .env option for enabling and configuring requests per
+        second ratelimiting.
       </p>
       <p>
         There's no link to try this out, just click the refresh button as fast
@@ -63,7 +80,23 @@
       </p>
     </section>
     <section>
+      <h2>Trust Score</h2>
+      <hr />
+      <p>
+        faucet has a toggleable trust score system, which gives each request an
+        trust score,<br />
+        assigns that to the IP address (uses the lowest score from past 3
+        minutes from the IP),<br />and blocks requests which are under the set
+        threshold.
+      </p>
+      <p>Want to get blocked? Try setting your user-agent to "curl",<br />
+        go to honeypot paths like <a href="/wp-login.php">/wp-login.php</a>,<br />
+        and just spam requests.
+      </p>
+    </section>
+    <section>
       <h2>I'm a teapot?</h2>
+      <hr />
       <p>WHAT!!! There's no possible way faucet is a teapot! Or is it?</p>
       <a href="/imateapot418">This totally does not lead to a teapot</a>
     </section>
