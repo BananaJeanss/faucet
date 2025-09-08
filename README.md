@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/faucet2.png" alt="Faucet Banner"/>
+  <img src="https://github.com/BananaJeanss/faucet/blob/main/assets/faucet2.png?raw=true" alt="Faucet Banner"/>
 </div>
 
 ---
