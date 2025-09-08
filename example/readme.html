@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>faucet - readme</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      section img {
+        max-width: 50%;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <hero>
+      <h1>faucet - readme</h1>
+      <p>HTML version of the README.md file, rendering may not be perfect.</p>
+      <ul>
+        <a href="/">Go back to home</a>
+        |
+        <a href="https://github.com/BananaJeanss/faucet/blob/main/README.md"
+          >GitHub README.md</a
+        >
+      </ul>
+    </hero>
+    <hr />  
+    <section></section>
+  </body>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    async function loadReadme() {
+      const section = document.querySelector("section");
+      try {
+        const res = await fetch(
+          "https://raw.githubusercontent.com/BananaJeanss/faucet/refs/heads/main/README.md"
+        );
+        if (!res.ok) throw new Error("Failed to fetch README.md");
+
+        const markdown = await res.text();
+        section.innerHTML = marked.parse(markdown);
+      } catch (err) {
+        section.innerHTML = `<p style="color:red;">Error loading README.md: ${err.message}</p>`;
+      }
+    }
+
+    loadReadme();
+  </script>
+</html>
