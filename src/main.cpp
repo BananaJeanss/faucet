@@ -50,7 +50,7 @@ bool toggleLogging = true;          // log requests to .log file
 int logMaxLines = 5000;             // max lines in log file before rotating
 bool trustXRealIp = false;          // trust X-Real-IP header from reverse proxy
 bool evaluateTrustScore = false;    // evaluate trust score on each request
-int trustScoreThreshold = 90;       // block requests with trust score above this
+int trustScoreThreshold = 10;       // block requests with trust score under this
 bool checkHoneypotPaths = false;    // check for honeypot paths such as /admin, /wp-login.php, etc.
 int blockforDuration = 600;         // duration in seconds to block an IP for if it goes below the trust score threshold
 

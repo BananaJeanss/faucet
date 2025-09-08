@@ -37,7 +37,7 @@ int loadConfig(int &port,
                      "LOG_MAX_LINES=5000\n"
                      "TRUST_XREALIP=false\n"
                      "EVALUATE_TRUSTSCORE=false\n"
-                     "TRUSTSCORE_THRESHOLD=90\n"
+                     "TRUSTSCORE_THRESHOLD=10\n"
                      "CHECK_HONEYPOT_PATHS=false\n"
                      "BLOCKFOR_DURATION=600\n";
 
