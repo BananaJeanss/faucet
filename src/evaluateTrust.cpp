@@ -28,7 +28,8 @@ const vector<string> defaultHoneypotPaths = {
 
 vector<string> honeypotPaths = defaultHoneypotPaths;
 
-struct lowestScorePerMinute { // keeps track of the lowest score per IP per minute
+struct lowestScorePerMinute
+{ // keeps track of the lowest score per IP per minute
     string ip;
     int score;
     time_t timestamp;
@@ -36,7 +37,8 @@ struct lowestScorePerMinute { // keeps track of the lowest score per IP per minu
 
 static vector<lowestScorePerMinute> lowestScores;
 
-struct honeypotsPer3Minutes {
+struct honeypotsPer3Minutes
+{
     string ip;
     int count;
     time_t timestamp;
@@ -151,7 +153,9 @@ void initializeHoneypotPaths()
         }
         fclose(file);
         printf("Loaded %zu honeypot paths from honeypotPaths.txt\n", honeypotPaths.size());
-    } else {
+    }
+    else
+    {
         printf("honeypotPaths.txt not found, using default honeypot paths\n");
     }
 }
@@ -200,7 +204,8 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
     bool isUnknownAgent = true;
     for (const auto &agent : suspiciousAgents)
     {
-        if (agentFoundAlready) break; 
+        if (agentFoundAlready)
+            break;
         if (userAgent.find(agent) != string::npos)
         {
             score -= 10; // suspicious user agent, lower trust
@@ -211,7 +216,8 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
 
     for (const auto &agent : trustedAgents)
     {
-        if (agentFoundAlready) break;
+        if (agentFoundAlready)
+            break;
         if (userAgent.find(agent) != string::npos)
         {
             score += 10; // trusted user agent, raise trust
@@ -225,20 +231,54 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
         score -= 10; // unknown user agent
     }
 
+    const vector<string> legitPlatforms = {
+        "Windows", "Linux", "macOS", "Android", "iOS", "Chrome OS", "Chromium OS"};
+
     // check for sec-ch-ua-platform
     if (headers.find("sec-ch-ua-platform") != string::npos)
     {
-        score += 5; // modern browser, raise trust a bit
-    }
-    else
-    {
-        score -= 5; // older browser or bot, lower trust a bit
+        // check if actually legit
+        bool foundLegit = false;
+        for (const auto &plat : legitPlatforms)
+        {
+            if (headers.find(plat) != string::npos)
+            {
+                foundLegit = true;
+                break;
+            }
+        }
+        if (foundLegit)
+        {
+            score += 5; // has legit platform, raise trust
+        }
+        else if (headers.find("Unknown") != string::npos)
+        {
+            // unknown platform, at least included so dont lower/raise
+        }
+        else
+        {
+            score -= 5; // older browser or bot, lower trust a bit
+        }
     }
 
     // check for referer
     if (headers.find("Referer: ") != string::npos)
     {
         score += 5; // has referer, raise trust a bit, but dont lower if none
+    }
+
+    // accept-encoding lalala
+    if (headers.find("Accept-Encoding: ") != string::npos)
+    {
+        // make sure it has e.g. gzip or deflate
+        if (headers.find("gzip") != string::npos || headers.find("deflate") != string::npos || headers.find("br") != string::npos || headers.find("zstd") != string::npos)
+        {
+            score += 5; // has, raise trust a bit
+        }
+    }
+    else
+    {
+        score -= 5; // no accept-encoding, lower trust a bit
     }
 
     // check for requests per minute from this IP
@@ -298,6 +338,7 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
             }
         }
     }
+
     // normalize reqPath: remove trailing slashes except root
     if (reqPath.size() > 1)
     {
@@ -349,15 +390,15 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
 
     // check 404s per minute from this IP
     int f404 = get404PMcount(ip);
-    if (f404 > 20)
+    if (f404 > 30)
     {
         score -= 35; // very high 404 rate, lower trust significantly
     }
-    else if (f404 > 10)
+    else if (f404 > 20)
     {
         score -= 20; // high 404 rate, lower trust
     }
-    else if (f404 > 5)
+    else if (f404 > 10)
     {
         score -= 10; // moderate 404 rate, lower trust a bit
     }
@@ -372,28 +413,38 @@ int evaluateTrust(const string &ip, const string &headers, bool &checkHoneypotPa
     clearLowestScores();
     int prevLowest = checkLowestScore(ip);
     int finalScore = score;
-        if (prevLowest == -1) {
-            // first entry for this IP in current window
-            lowestScores.push_back({ip, score, now});
-        } else if (score < prevLowest) {
-            // new lower score replaces stored
-            for (auto &entry : lowestScores) {
-                if (entry.ip == ip) {
-                    entry.score = score;
-                    entry.timestamp = now;
-                    break;
-                }
+    if (prevLowest == -1)
+    {
+        // first entry for this IP in current window
+        lowestScores.push_back({ip, score, now});
+    }
+    else if (score < prevLowest)
+    {
+        // new lower score replaces stored
+        for (auto &entry : lowestScores)
+        {
+            if (entry.ip == ip)
+            {
+                entry.score = score;
+                entry.timestamp = now;
+                break;
             }
-        } else {
-            // use previous lowest score
-            finalScore = prevLowest;
         }
+    }
+    else
+    {
+        // use previous lowest score
+        finalScore = prevLowest;
+    }
 
-        if (finalScore != score) {
-            printf("Evaluated trust score for %s: %d (using previous lowest, raw: %d)\n", ip.c_str(), finalScore, score);
-        } else {
-            printf("Evaluated trust score for %s: %d\n", ip.c_str(), finalScore);
-        }
+    if (finalScore != score)
+    {
+        printf("Evaluated trust score for %s: %d (using previous lowest, raw: %d)\n", ip.c_str(), finalScore, score);
+    }
+    else
+    {
+        printf("Evaluated trust score for %s: %d\n", ip.c_str(), finalScore);
+    }
 
     return finalScore;
 }
