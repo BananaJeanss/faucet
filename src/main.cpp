@@ -17,6 +17,7 @@
 #include <cctype>
 #include <vector>
 #include <algorithm>
+#include <sstream>
 
 #include "include/loadConfig.h"
 #include "include/return404.h"
@@ -121,6 +122,45 @@ static void clearBlockedClients()
                            return entry.blockedUntil <= now;
                        }),
         blockedClientList.end());
+}
+
+static bool percentDecode(const char *in, char *out, size_t outSize) // percent decode a path, returns false if invalid sequence found
+{
+    size_t oi = 0;
+    for (size_t i = 0; in[i] != '\0'; ++i)
+    {
+        if (oi + 1 >= outSize)
+            break; // truncate silently (could also fail)
+        unsigned char c = (unsigned char)in[i];
+        if (c == '%')
+        {
+            if (!isxdigit((unsigned char)in[i + 1]) || !isxdigit((unsigned char)in[i + 2]))
+            {
+                return false; // invalid sequence
+            }
+            auto hexVal = [](char h) -> int
+            {
+                if (h >= '0' && h <= '9')
+                    return h - '0';
+                if (h >= 'a' && h <= 'f')
+                    return 10 + (h - 'a');
+                if (h >= 'A' && h <= 'F')
+                    return 10 + (h - 'A');
+                return 0;
+            };
+            int hi = hexVal(in[i + 1]);
+            int lo = hexVal(in[i + 2]);
+            out[oi++] = (char)((hi << 4) | lo);
+            i += 2;
+        }
+        else
+        {
+            // Leave other bytes as-is. We do not translate '+' to space in path section.
+            out[oi++] = (char)c;
+        }
+    }
+    out[oi] = '\0';
+    return true;
 }
 
 int main(int argc, char *argv[])
@@ -639,6 +679,16 @@ int main(int argc, char *argv[])
             continue;
         }
         *path_end = 0;
+
+        // Decode any %HH sequences in the path so that files with spaces or other characters are correctly located
+        char decodedPath[2048];
+        if (!percentDecode(path_start, decodedPath, sizeof(decodedPath)))
+        {
+            // invalid percent-encoding, 400
+            returnErrorPage(client_fd, 400, contactEmail);
+            continue;
+        }
+        path_start = decodedPath; // switch to decoded path for further logic
 
         // map / to index.html if no file specified
         bool userSetFile = true;

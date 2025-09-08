@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <ctime>
+#include <cctype>
+#include <sstream>
 
 using namespace std;
 
@@ -70,6 +72,28 @@ void returnDirListing(int client_fd,
                       const std::string &contactEmail,
                       const std::string &ip)
 {
+    auto urlEncode = [](const std::string &in) -> std::string
+    {
+        std::ostringstream oss;
+        for (unsigned char c : in)
+        {
+            // encode space and all non-unreserved characters per RFC 3986.
+            if ((c >= 'A' && c <= 'Z') ||
+                (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '_' || c == '.' || c == '~' || c == '/')
+            {
+                oss << c;
+            }
+            else
+            {
+                char buf[4];
+                snprintf(buf, sizeof(buf), "%02X", c);
+                oss << '%' << buf;
+            }
+        }
+        return oss.str();
+    };
     std::string fullPath = siteDir.empty() ? relPath : (siteDir + "/" + relPath);
 
     DIR *dir = opendir(fullPath.c_str());
@@ -127,7 +151,7 @@ void returnDirListing(int client_fd,
             display += '/';
 
         body += "<tr><td><a href=\"";
-        body += e;
+    body += urlEncode(e);
         if (isDir)
         {
             body += "/"; // ensure link ends with slash for directories
