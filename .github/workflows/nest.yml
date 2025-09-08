@@ -21,6 +21,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd ~/faucet
+            git switch main
             git pull
             make || exit 1
             systemctl --user restart faucet.service || exit 1
