@@ -12,10 +12,23 @@ void returnErrorPage(int client_fd, int errorType, string contactMail)
 {
     // build html body
     const char *ctype = "text/html; charset=utf-8";
-    static const char *pageTemplate =
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>{ErrorCode} {ErrorTextLite}</title>"
-        "<style>body{font-family:sans-serif;text-align:center;margin-top:50px}h1{font-size:48px}p{font-size:24px}</style>"
-        "</head><body><h1>{ErrorCode}</h1><hr><p>{ErrorText}</p><a href=\"/\">Return to Home</a></body></html>";
+
+    static const string styling = "<style>"
+    "body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;text-align:center;margin-top:50px;background-color:#2d2d2d;color:#e0e0e0}"
+    "h1{font-size:48px;color:#f0f0f0}"
+    "p{font-size:24px}"
+    "a{text-decoration:none;color:#6db3f2}"
+    "a:hover{text-decoration:underline;color:#85c1ff}"
+    "hr{border:none;border-top:1px solid #444}"
+    "footer p{font-size:12px;color:#888;margin-top:20px}"
+    "</style>";
+
+    static const string pageTemplate =
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>{ErrorCode} {ErrorTextLite}</title>" + styling +
+        "</head><body><h1>{ErrorCode}</h1><hr><p>{ErrorText}</p>"
+        "<a href=\"/\">Return to Home</a>"
+        "<footer><p>Powered by faucet</p></footer>"
+        "</body></html>";
 
     string errorText;
     switch (errorType)
