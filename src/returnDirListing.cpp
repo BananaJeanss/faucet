@@ -90,6 +90,15 @@ static const char *codexmlSvg =
     "<path d=\"m14.5 4-5 16\"/>"
     "</svg>";
 
+static const char *musicSvg =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+    "width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"%23e0e0e0\" stroke-width=\"2\" "
+    "stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-music-icon lucide-music\">"
+    "<path d=\"M9 18V5l12-2v13\"/>"
+    "<circle cx=\"6\" cy=\"18\" r=\"3\"/>"
+    "<circle cx=\"18\" cy=\"16\" r=\"3\"/>"
+    "</svg>";
+
 static const std::string styling =
     "<style>"
     "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #2d2d2d; color: #e0e0e0; }"
@@ -122,6 +131,8 @@ static const std::string styling =
     std::string(activitySvg) + "'); vertical-align: middle; margin-right: 8px; color: #f0f0f0; }"
                             ".codexml:before { content: url('data:image/svg+xml;utf8," +
     std::string(codexmlSvg) + "'); vertical-align: middle; margin-right: 8px; color: #f0f0f0; }"
+                            ".music:before { content: url('data:image/svg+xml;utf8," +
+    std::string(musicSvg) + "'); vertical-align: middle; margin-right: 8px; color: #f0f0f0; }"
                            "</style>";
 
 static const std::string pageHeader =
@@ -149,6 +160,8 @@ static std::string getFileTypeClass(const std::string &filename) {
         return "textfile";
     if (ext == "html" || ext == "htm" || ext == "css" || ext == "js" || ext == "cpp" || ext == "h" || ext == "hpp" || ext == "c" || ext == "java" || ext == "py" || ext == "rb" || ext == "go")
         return "codexml";
+    if (ext == "mp3" || ext == "wav" || ext == "flac" || ext == "aac" || ext == "ogg" || ext == "m4a")
+        return "music";
     if (ext == "log")
         return "activity";
     return "file"; // default
