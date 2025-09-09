@@ -5,3 +5,8 @@
 /config.php
 /setup.php
 /install.php
+/2019/wp-includes/wlwmanifest.xml
+/web/wp-includes/wlwmanifest.xml
+/wp1/wp-includes/wlwmanifest.xml
+/.env
+/.git/config
