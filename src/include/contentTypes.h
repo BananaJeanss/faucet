@@ -20,7 +20,7 @@ inline const char *guessContentType(const char *path)
         return "image/jpeg";
     if (strcmp(dot, ".gif") == 0)
         return "image/gif";
-    if (strcmp(dot, ".txt") == 0)
+    if (strcmp(dot, ".txt") == 0 || strcmp(dot, ".log") == 0)
         return "text/plain";
     if (strcmp(dot, ".svg") == 0)
         return "image/svg+xml";
