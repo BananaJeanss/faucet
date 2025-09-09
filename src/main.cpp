@@ -700,7 +700,7 @@ int main(int argc, char *argv[])
         if (strncmp(buffer, "GET ", 4) != 0)
         {
             // unsupported method
-            close(client_fd);
+            returnErrorPage(client_fd, 405, contactEmail);
             continue;
         }
 
