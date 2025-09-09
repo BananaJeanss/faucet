@@ -39,20 +39,20 @@ static void sig_handler(int)
 }
 
 // config values
-int port = 8080;                    // port to listen on
-string siteDir = "public";          // site root directory, relative to executable
-string Page404 = "";                // relative to siteDir, empty for none
-bool useDirListing = false;         // enables directory listing
-int requestRateLimit = 10;          // requests/second per IP, 0 for none
-string contactEmail = "";           // contact email for returnErrorPage
-string authCredentials = "";        // user:password for basic auth, empty for none
-bool toggleLogging = true;          // log requests to .log file
-int logMaxLines = 5000;             // max lines in log file before rotating
-bool trustXRealIp = false;          // trust X-Real-IP header from reverse proxy
-bool evaluateTrustScore = false;    // evaluate trust score on each request
-int trustScoreThreshold = 10;       // block requests with trust score under this
-bool checkHoneypotPaths = false;    // check for honeypot paths such as /admin, /wp-login.php, etc.
-int blockforDuration = 600;         // duration in seconds to block an IP for if it goes below the trust score threshold
+int port = 8080;                 // port to listen on
+string siteDir = "public";       // site root directory, relative to executable
+string Page404 = "";             // relative to siteDir, empty for none
+bool useDirListing = false;      // enables directory listing
+int requestRateLimit = 10;       // requests/second per IP, 0 for none
+string contactEmail = "";        // contact email for returnErrorPage
+string authCredentials = "";     // user:password for basic auth, empty for none
+bool toggleLogging = true;       // log requests to .log file
+int logMaxLines = 5000;          // max lines in log file before rotating
+bool trustXRealIp = false;       // trust X-Real-IP header from reverse proxy
+bool evaluateTrustScore = false; // evaluate trust score on each request
+int trustScoreThreshold = 10;    // block requests with trust score under this
+bool checkHoneypotPaths = false; // check for honeypot paths such as /admin, /wp-login.php, etc.
+int blockforDuration = 600;      // duration in seconds to block an IP for if it goes below the trust score threshold
 
 string authUser = "";
 string authPass = "";
@@ -161,6 +161,97 @@ static bool percentDecode(const char *in, char *out, size_t outSize) // percent 
     }
     out[oi] = '\0';
     return true;
+}
+
+static bool parseRangeHeader(const std::string &headers, off_t fileSize, off_t &outStart, off_t &outEnd) // returns false if no Range header found or invalid
+{
+    // locate "Range:" case-insensitive
+    const char *h = headers.c_str();
+    size_t hlen = headers.size();
+    for (size_t i = 0; i + 6 < hlen; ++i)
+    {
+        if (tolower((unsigned char)h[i]) == 'r' && strncasecmp(h + i, "Range:", 6) == 0)
+        {
+            // move past 'Range:'
+            size_t j = i + 6;
+            // skip spaces
+            while (j < hlen && (h[j] == ' ' || h[j] == '\t'))
+                ++j;
+            // expect bytes=
+            if (j + 6 >= hlen || strncasecmp(h + j, "bytes=", 6) != 0)
+                return false;
+            j += 6;
+            // find end of line
+            size_t lineEnd = headers.find('\n', j);
+            if (lineEnd == std::string::npos)
+                lineEnd = hlen;
+            std::string spec = headers.substr(j, lineEnd - j);
+            // trim CR
+            if (!spec.empty() && spec.back() == '\r')
+                spec.pop_back();
+            // reject multiple ranges
+            if (spec.find(',') != std::string::npos)
+                return false;
+            if (spec.empty())
+                return false;
+            if (spec[0] == '-')
+            {
+                // suffix length
+                std::string tail = spec.substr(1);
+                if (tail.empty())
+                    return false;
+                char *endp = nullptr;
+                long long suffix = strtoll(tail.c_str(), &endp, 10);
+                if (*endp != '\0' || suffix <= 0)
+                    return false;
+                if ((off_t)suffix > fileSize)
+                {
+                    outStart = 0;
+                }
+                else
+                {
+                    outStart = fileSize - (off_t)suffix;
+                }
+                outEnd = fileSize ? fileSize - 1 : 0;
+                return true;
+            }
+            // find dash
+            size_t dash = spec.find('-');
+            if (dash == std::string::npos)
+                return false;
+            std::string first = spec.substr(0, dash);
+            std::string second = spec.substr(dash + 1);
+            if (first.empty())
+                return false;
+            char *endp1 = nullptr;
+            long long start = strtoll(first.c_str(), &endp1, 10);
+            if (*endp1 != '\0' || start < 0)
+                return false;
+            if (second.empty())
+            {
+                // bytes=start-
+                if ((off_t)start >= fileSize)
+                    return false;
+                outStart = (off_t)start;
+                outEnd = fileSize - 1;
+                return true;
+            }
+            char *endp2 = nullptr;
+            long long endv = strtoll(second.c_str(), &endp2, 10);
+            if (*endp2 != '\0' || endv < 0)
+                return false;
+            if (start > endv)
+                return false;
+            if ((off_t)start >= fileSize)
+                return false;
+            if ((off_t)endv >= fileSize)
+                endv = fileSize - 1;
+            outStart = (off_t)start;
+            outEnd = (off_t)endv;
+            return true;
+        }
+    }
+    return false; // not found
 }
 
 int main(int argc, char *argv[])
@@ -750,6 +841,7 @@ int main(int argc, char *argv[])
                                                       "HTTP/1.1 200 OK\r\n"
                                                       "Content-Length: %lld\r\n"
                                                       "Content-Type: %s\r\n"
+                                                      "Accept-Ranges: bytes\r\n"
                                                       "Connection: close\r\n"
                                                       "\r\n",
                                                       (long long)ist.st_size, ctype);
@@ -762,6 +854,7 @@ int main(int argc, char *argv[])
                                                       "HTTP/1.1 200 OK\r\n"
                                                       "Content-Length: %lld\r\n"
                                                       "Content-Type: text/html; charset=utf-8\r\n"
+                                                      "Accept-Ranges: bytes\r\n"
                                                       "Connection: close\r\n"
                                                       "\r\n",
                                                       (long long)ist.st_size);
@@ -878,6 +971,7 @@ int main(int argc, char *argv[])
                                                   "HTTP/1.1 200 OK\r\n"
                                                   "Content-Length: %lld\r\n"
                                                   "Content-Type: %s\r\n"
+                                                  "Accept-Ranges: bytes\r\n"
                                                   "Connection: close\r\n"
                                                   "\r\n",
                                                   (long long)ist.st_size, ctype);
@@ -890,6 +984,7 @@ int main(int argc, char *argv[])
                                                   "HTTP/1.1 200 OK\r\n"
                                                   "Content-Length: %lld\r\n"
                                                   "Content-Type: text/html; charset=utf-8\r\n"
+                                                  "Accept-Ranges: bytes\r\n"
                                                   "Connection: close\r\n"
                                                   "\r\n",
                                                   (long long)ist.st_size);
@@ -984,28 +1079,112 @@ int main(int argc, char *argv[])
 
         // send file
         // guess content type based on extension for proper loading in browsers
-        const char *ctype = guessContentType(fullPath.c_str());
+        // also check for Range header, and send partial content if present
+        const char *hdrEnd2 = strstr(buffer, "\r\n\r\n");
+        size_t headerLen2 = hdrEnd2 ? (size_t)(hdrEnd2 - buffer) : used;
+        std::string headersAll(buffer, headerLen2);
+        off_t rangeStart = 0, rangeEnd = 0; // inclusive
+        bool hasRange = parseRangeHeader(headersAll, st.st_size, rangeStart, rangeEnd);
 
-        char header[256];
-        int header_len = snprintf(header, sizeof(header),
+        const char *ctype = guessContentType(fullPath.c_str());
+        bool partial = false;
+        if (hasRange)
+        {
+            if (st.st_size == 0)
+            {
+                // cannot satisfy any range on empty file -> 416
+                char hdr[256];
+                int hl = snprintf(hdr, sizeof(hdr),
+                                  "HTTP/1.1 416 Range Not Satisfiable\r\n"
+                                  "Content-Range: bytes */0\r\n"
+                                  "Connection: close\r\n"
+                                  "\r\n");
+                if (hl > 0 && hl < (int)sizeof(hdr))
+                    send(client_fd, hdr, hl, 0);
+                close(opened_fd);
+                close(client_fd);
+                continue;
+            }
+            if (rangeStart < 0 || rangeEnd < rangeStart || rangeEnd >= st.st_size)
+            {
+                // invalid (parse function should guarantee end < size, but double check)
+                char hdr[256];
+                int hl = snprintf(hdr, sizeof(hdr),
+                                  "HTTP/1.1 416 Range Not Satisfiable\r\n"
+                                  "Content-Range: bytes */%lld\r\n"
+                                  "Connection: close\r\n"
+                                  "\r\n",
+                                  (long long)st.st_size);
+                if (hl > 0 && hl < (int)sizeof(hdr))
+                    send(client_fd, hdr, hl, 0);
+                close(opened_fd);
+                close(client_fd);
+                continue;
+            }
+            partial = true;
+        }
+
+        off_t sendStart = partial ? rangeStart : 0;
+        off_t sendEnd = partial ? rangeEnd : (st.st_size ? st.st_size - 1 : 0);
+        off_t contentLen = (sendEnd >= sendStart) ? (sendEnd - sendStart + 1) : 0;
+
+        // build header
+        char header[512];
+        int header_len = 0;
+        if (partial)
+        {
+            header_len = snprintf(header, sizeof(header),
+                                  "HTTP/1.1 206 Partial Content\r\n"
+                                  "Content-Length: %lld\r\n"
+                                  "Content-Type: %s\r\n"
+                                  "Accept-Ranges: bytes\r\n"
+                                  "Content-Range: bytes %lld-%lld/%lld\r\n"
+                                  "Connection: close\r\n"
+                                  "\r\n",
+                                  (long long)contentLen, ctype,
+                                  (long long)sendStart, (long long)sendEnd, (long long)st.st_size);
+        }
+        else
+        {
+            header_len = snprintf(header, sizeof(header),
                                   "HTTP/1.1 200 OK\r\n"
                                   "Content-Length: %lld\r\n"
                                   "Content-Type: %s\r\n"
+                                  "Accept-Ranges: bytes\r\n"
                                   "Connection: close\r\n"
                                   "\r\n",
                                   (long long)st.st_size, ctype);
+        }
         std::string tempHeader = headerManager(header);
         if (tempHeader == "invalid")
         {
             // fallback
-            printf("Invalid header generated in main when serving file, using fallback 5.\n");
-            header_len = snprintf(header, sizeof(header),
-                                  "HTTP/1.1 200 OK\r\n"
-                                  "Content-Length: %lld\r\n"
-                                  "Content-Type: text/html; charset=utf-8\r\n"
-                                  "Connection: close\r\n"
-                                  "\r\n",
-                                  (long long)st.st_size);
+            if (partial)
+            {
+                printf("Invalid header generated in main when serving file, using fallback 5.\n");
+                header_len = snprintf(header, sizeof(header),
+                                      "HTTP/1.1 206 Partial Content\r\n"
+                                      "Content-Length: %lld\r\n"
+                                      "Content-Type: %s\r\n"
+                                      "Accept-Ranges: bytes\r\n"
+                                      "Content-Range: bytes %lld-%lld/%lld\r\n"
+                                      "Connection: close\r\n"
+                                      "\r\n",
+                                      (long long)contentLen, ctype,
+                                      (long long)sendStart, (long long)sendEnd, (long long)st.st_size);
+            }
+            else
+            {
+                printf("Invalid header generated in main when serving file, using fallback 6.\n");
+                header_len = snprintf(header, sizeof(header),
+                                      "HTTP/1.1 200 OK\r\n"
+                                      "Content-Length: %lld\r\n"
+                                      "Content-Type: text/html; charset=utf-8\r\n"
+                                      "Accept-Ranges: bytes\r\n"
+                                      "Connection: close\r\n"
+                                      "\r\n",
+                                      (long long)st.st_size);
+            }
         }
         else
         {
@@ -1020,9 +1199,9 @@ int main(int argc, char *argv[])
                 header_len = -1;
             }
         }
-        if (header_len < 0)
+        if (header_len >= 0 && header_len < (int)sizeof(header))
         {
-            // already sent header
+            send(client_fd, header, header_len, 0);
         }
         else if (header_len >= (int)sizeof(header))
         {
@@ -1030,22 +1209,31 @@ int main(int argc, char *argv[])
             close(client_fd);
             continue;
         }
-        else
-        {
-            send(client_fd, header, header_len, 0);
-        }
 
-        // send full file
-        off_t offset = 0;
-        while (offset < st.st_size)
+        // Position file descriptor if partial
+        off_t offset = sendStart;
+        if (offset > 0)
         {
-            ssize_t sent = sendfile(client_fd, opened_fd, &offset, st.st_size - offset);
+            if (lseek(opened_fd, offset, SEEK_SET) == (off_t)-1)
+            {
+                close(opened_fd);
+                close(client_fd);
+                continue;
+            }
+        }
+        off_t remaining = contentLen;
+        while (remaining > 0)
+        {
+            ssize_t toSend = remaining;
+            // sendfile updates offset internally when offset pointer is provided; here we use NULL and rely on fd position
+            ssize_t sent = sendfile(client_fd, opened_fd, nullptr, toSend);
             if (sent <= 0)
             {
                 if (sent < 0 && (errno == EPIPE || errno == ECONNRESET))
                     break; // client closed connection
-                break;     // error or EOF
+                break;
             }
+            remaining -= sent;
         }
 
         // close connections
