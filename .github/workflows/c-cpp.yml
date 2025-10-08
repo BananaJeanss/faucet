@@ -1,21 +1,26 @@
 name: C/C++ CI
-
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [ "main" ]
-
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+      - '.gitignore'
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Build with make
         run: make
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
