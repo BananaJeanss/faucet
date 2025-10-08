@@ -1,18 +1,19 @@
 name: Deploy to Nest
-
 on:
   push:
     branches:
       - main
-
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+      - '.gitignore'
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Make and restart the faucet example site on Nest via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
